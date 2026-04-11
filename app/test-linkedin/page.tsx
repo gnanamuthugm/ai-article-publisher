@@ -1,8 +1,52 @@
+'use client';
+
+import { useState, useEffect } from 'react';
 import LinkedInLoginButton from '@/components/LinkedInLoginButton';
 import LinkedInConfigStatus from '@/components/LinkedInConfigStatus';
-import { getLinkedInAuthUrl } from '@/lib/linkedin';
 
 export default function TestLinkedInPage() {
+  const [isClient, setIsClient] = useState(false);
+  const [authUrl, setAuthUrl] = useState<string>('');
+  const [error, setError] = useState<string>('');
+
+  useEffect(() => {
+    setIsClient(true);
+    
+    // Only try to generate auth URL on client side
+    try {
+      // Import dynamically to avoid build-time error
+      import('@/lib/linkedin').then(({ getLinkedInAuthUrl }) => {
+        try {
+          const url = getLinkedInAuthUrl();
+          setAuthUrl(url);
+        } catch (err) {
+          setError(err instanceof Error ? err.message : 'Failed to generate auth URL');
+        }
+      }).catch(() => {
+        setError('LinkedIn module not available');
+      });
+    } catch (err) {
+      setError('Failed to load LinkedIn module');
+    }
+  }, []);
+
+  // Show loading state during SSR/hydration
+  if (!isClient) {
+    return (
+      <div className="min-h-screen bg-gray-50 py-12">
+        <div className="max-w-2xl mx-auto px-4">
+          <div className="bg-white rounded-lg shadow-sm p-8">
+            <div className="animate-pulse">
+              <div className="h-8 bg-gray-200 rounded w-1/3 mb-6"></div>
+              <div className="h-4 bg-gray-200 rounded w-full mb-4"></div>
+              <div className="h-4 bg-gray-200 rounded w-3/4"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-gray-50 py-12">
       <div className="max-w-2xl mx-auto px-4">
@@ -34,11 +78,35 @@ export default function TestLinkedInPage() {
                 <h3 className="font-semibold text-gray-800 mb-2">Debug Information:</h3>
                 <div className="text-sm text-gray-600 space-y-1">
                   <p><strong>Auth URL:</strong></p>
-                  <code className="block bg-white p-2 rounded border text-xs break-all">
-                    {getLinkedInAuthUrl()}
-                  </code>
+                  {error ? (
+                    <div className="bg-red-50 border border-red-200 rounded p-3 text-red-700 text-sm">
+                      <strong>Error:</strong> {error}
+                    </div>
+                  ) : authUrl ? (
+                    <code className="block bg-white p-2 rounded border text-xs break-all">
+                      {authUrl}
+                    </code>
+                  ) : (
+                    <div className="bg-yellow-50 border border-yellow-200 rounded p-3 text-yellow-700 text-sm">
+                      Loading auth URL...
+                    </div>
+                  )}
                 </div>
               </div>
+
+              {error && (
+                <div className="mt-4 p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
+                  <h3 className="font-semibold text-yellow-800 mb-2">Setup Required:</h3>
+                  <div className="text-sm text-yellow-700 space-y-2">
+                    <p>To fix this error:</p>
+                    <ol className="list-decimal list-inside space-y-1">
+                      <li>Add your LinkedIn Client ID to environment variables</li>
+                      <li>Restart the development server</li>
+                      <li>Ensure your LinkedIn app has the correct permissions</li>
+                    </ol>
+                  </div>
+                </div>
+              )}
             </div>
           </div>
         </div>
