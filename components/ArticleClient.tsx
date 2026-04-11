@@ -90,7 +90,7 @@ export default function ArticleClient({ article, lang }: { article: Article; lan
         {/* Author row — top of article */}
         <div className="flex items-center gap-3 mb-6 p-4 bg-white rounded-xl border border-gray-100 shadow-sm">
           <img
-            src="https://avatars.githubusercontent.com/gnanamuthugm"
+            src="/images/profile.png"
             alt="Gnanamuthu G"
             className="w-12 h-12 rounded-full object-cover border-2 border-blue-100 flex-shrink-0"
           />
@@ -162,7 +162,7 @@ export default function ArticleClient({ article, lang }: { article: Article; lan
           <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-4">About the Author</p>
           <div className="flex items-start gap-4">
             <img
-              src="https://avatars.githubusercontent.com/gnanamuthugm"
+              src="/images/profile.png"
               alt="Gnanamuthu G"
               className="w-16 h-16 rounded-full object-cover border-2 border-blue-100 flex-shrink-0"
             />

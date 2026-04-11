@@ -193,8 +193,18 @@ function getCurrentCategory() {
 
 function getTodaysTopic(categoryId) {
   const topics = TOPICS[categoryId];
-  const dayOfMonth = new Date().getDate() - 1;
+  // Always publish in order: Day 1 of month = Topic 1, Day 2 = Topic 2, etc.
+  // Use category start month to calculate absolute day index
+  const category = CATEGORY_SCHEDULE.find(c => c.id === categoryId);
+  const now = new Date();
+  const dayOfMonth = now.getDate() - 1; // 0-indexed
   return topics[dayOfMonth % topics.length];
+}
+
+// Get topic index for logging
+function getTopicIndex(categoryId) {
+  const now = new Date();
+  return now.getDate() - 1; // 0-indexed, Day 1 = index 0
 }
 
 function createSlug(text) {

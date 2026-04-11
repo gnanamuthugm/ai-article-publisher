@@ -74,7 +74,7 @@ export default async function HomePage({ params, searchParams }: HomePageProps) 
       <section className="bg-white border-b border-gray-100">
         <div className="max-w-5xl mx-auto px-4 py-5 flex items-center gap-4">
           <img
-            src="https://avatars.githubusercontent.com/gnanamuthugm"
+            src="/images/profile.png"
             alt="Gnanamuthu G"
             className="w-14 h-14 rounded-full object-cover border-2 border-blue-100 flex-shrink-0"
           />
@@ -164,7 +164,7 @@ export default async function HomePage({ params, searchParams }: HomePageProps) 
                     {/* Mini author row */}
                     <div className="flex items-center gap-2 mb-3">
                       <img
-                        src="https://avatars.githubusercontent.com/gnanamuthugm"
+                        src="/images/profile.png"
                         alt="Gnanamuthu G"
                         className="w-6 h-6 rounded-full object-cover"
                       />
