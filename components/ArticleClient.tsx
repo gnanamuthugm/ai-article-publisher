@@ -103,7 +103,7 @@ export default function ArticleClient({ article, lang }: { article: Article; lan
               <a href="https://gnanamuthugm.github.io/portfolio/" target="_blank" rel="noopener noreferrer"
                 className="text-xs text-gray-500 hover:underline">🌐 Portfolio</a>
               <a href="https://topmate.io/gnanamuthugm" target="_blank" rel="noopener noreferrer"
-                className="text-xs text-green-600 hover:underline">📅 Book a call</a>
+                className="text-xs text-green-600 hover:underline">📥 Download PDF</a>
               <a href="https://github.com/gnanamuthugm" target="_blank" rel="noopener noreferrer"
                 className="text-xs text-gray-500 hover:underline">🐙 GitHub</a>
             </div>
@@ -180,7 +180,7 @@ export default function ArticleClient({ article, lang }: { article: Article; lan
                 <a href="https://github.com/gnanamuthugm" target="_blank" rel="noopener noreferrer"
                   className="text-sm text-gray-600 hover:underline font-medium">🐙 GitHub</a>
                 <a href="https://topmate.io/gnanamuthugm" target="_blank" rel="noopener noreferrer"
-                  className="text-sm text-green-600 hover:underline font-medium">📅 Book a 1:1 call</a>
+                  className="text-sm text-green-600 hover:underline font-medium">📥 Download PDF</a>
               </div>
             </div>
           </div>

@@ -98,7 +98,7 @@ export default async function HomePage({ params, searchParams }: HomePageProps) 
               </a>
               <a href="https://topmate.io/gnanamuthugm" target="_blank" rel="noopener noreferrer"
                 className="text-xs text-green-600 hover:underline flex items-center gap-1">
-                📅 Book a call
+                  📥 Download PDF
               </a>
             </div>
           </div>
