@@ -48,18 +48,13 @@ export default function ArticleClient({ article, lang }: { article: Article; lan
       {/* Sticky Header */}
       <header className="bg-white border-b border-gray-200 sticky top-0 z-20">
         <div className="max-w-3xl mx-auto px-4 py-3 flex items-center justify-between">
-          <Link
-            href={`/${lang}`}
-            className="text-blue-600 hover:underline text-sm flex items-center gap-1"
-          >
-            ← All articles
+          <Link href={`/${lang}`} className="text-blue-600 hover:underline text-sm flex items-center gap-1">
+            ← Learn Daily
           </Link>
-
           <div className="flex items-center gap-3">
             <span className={`text-xs font-semibold px-3 py-1 rounded-full ${categoryStyle}`}>
               {article.categoryEmoji} {article.categoryName}
             </span>
-            {/* Language Switcher — top right */}
             <LanguageSwitcher
               articleContent={article.content}
               onTranslated={handleTranslated}
@@ -90,9 +85,30 @@ export default function ArticleClient({ article, lang }: { article: Article; lan
         </div>
 
         {/* Title */}
-        <h1 className="text-3xl font-bold text-gray-900 mb-4 leading-tight">
-          {article.title}
-        </h1>
+        <h1 className="text-3xl font-bold text-gray-900 mb-4 leading-tight">{article.title}</h1>
+
+        {/* Author row — top of article */}
+        <div className="flex items-center gap-3 mb-6 p-4 bg-white rounded-xl border border-gray-100 shadow-sm">
+          <img
+            src="https://avatars.githubusercontent.com/gnanamuthugm"
+            alt="Gnanamuthu G"
+            className="w-12 h-12 rounded-full object-cover border-2 border-blue-100 flex-shrink-0"
+          />
+          <div>
+            <p className="font-semibold text-gray-900 text-sm">Gnanamuthu G</p>
+            <p className="text-gray-500 text-xs">AI &amp; Contact Center Expert · Google CCAIP Specialist</p>
+            <div className="flex items-center gap-3 mt-1 flex-wrap">
+              <a href="https://www.linkedin.com/in/gnanamuthugm" target="_blank" rel="noopener noreferrer"
+                className="text-xs text-blue-600 hover:underline">💼 LinkedIn</a>
+              <a href="https://gnanamuthugm.github.io/portfolio/" target="_blank" rel="noopener noreferrer"
+                className="text-xs text-gray-500 hover:underline">🌐 Portfolio</a>
+              <a href="https://topmate.io/gnanamuthugm" target="_blank" rel="noopener noreferrer"
+                className="text-xs text-green-600 hover:underline">📅 Book a call</a>
+              <a href="https://github.com/gnanamuthugm" target="_blank" rel="noopener noreferrer"
+                className="text-xs text-gray-500 hover:underline">🐙 GitHub</a>
+            </div>
+          </div>
+        </div>
 
         {/* Summary box */}
         <div className="bg-blue-50 border-l-4 border-blue-500 p-4 rounded-r-xl mb-8">
@@ -100,7 +116,7 @@ export default function ArticleClient({ article, lang }: { article: Article; lan
           <p className="text-blue-700 text-sm leading-relaxed">{article.summary}</p>
         </div>
 
-        {/* Article Content — switches language */}
+        {/* Article Content */}
         <div
           className="mb-8 text-gray-700
             [&_h2]:text-xl [&_h2]:font-bold [&_h2]:text-gray-800 [&_h2]:mt-8 [&_h2]:mb-3
@@ -135,15 +151,44 @@ export default function ArticleClient({ article, lang }: { article: Article; lan
           </div>
         )}
 
-        {/* Quiz — 2 questions, locked */}
+        {/* Quiz */}
         <QuizSection questions={article.quiz || []} />
 
-        {/* Comments — multilingual + translate */}
+        {/* Comments */}
         <CommentsSection articleSlug={article.slug} />
+
+        {/* Author Bio — bottom of article */}
+        <div className="mt-10 p-6 bg-white rounded-2xl border border-gray-100 shadow-sm">
+          <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-4">About the Author</p>
+          <div className="flex items-start gap-4">
+            <img
+              src="https://avatars.githubusercontent.com/gnanamuthugm"
+              alt="Gnanamuthu G"
+              className="w-16 h-16 rounded-full object-cover border-2 border-blue-100 flex-shrink-0"
+            />
+            <div>
+              <p className="font-bold text-gray-900 text-base">Gnanamuthu G</p>
+              <p className="text-gray-500 text-sm mt-1 leading-relaxed">
+                AI &amp; Contact Center specialist with hands-on expertise in Google CCAIP, Dialogflow CX, and Conversational AI. 
+                Passionate about helping teams build intelligent customer experiences and crack the CCAIP certification.
+              </p>
+              <div className="flex items-center gap-4 mt-3 flex-wrap">
+                <a href="https://www.linkedin.com/in/gnanamuthugm" target="_blank" rel="noopener noreferrer"
+                  className="text-sm text-blue-600 hover:underline font-medium">💼 LinkedIn</a>
+                <a href="https://gnanamuthugm.github.io/portfolio/" target="_blank" rel="noopener noreferrer"
+                  className="text-sm text-gray-600 hover:underline font-medium">🌐 Portfolio</a>
+                <a href="https://github.com/gnanamuthugm" target="_blank" rel="noopener noreferrer"
+                  className="text-sm text-gray-600 hover:underline font-medium">🐙 GitHub</a>
+                <a href="https://topmate.io/gnanamuthugm" target="_blank" rel="noopener noreferrer"
+                  className="text-sm text-green-600 hover:underline font-medium">📅 Book a 1:1 call</a>
+              </div>
+            </div>
+          </div>
+        </div>
       </main>
 
       <footer className="text-center py-8 text-gray-400 text-sm border-t border-gray-100 mt-8">
-        CCAIP Daily — New article every morning at 11:30 AM IST
+        <p>Learn Daily by <a href="https://www.linkedin.com/in/gnanamuthugm" className="text-blue-500 hover:underline">Gnanamuthu G</a> · New article every morning at 11:30 AM IST</p>
       </footer>
     </div>
   );

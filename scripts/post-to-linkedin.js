@@ -24,32 +24,36 @@ async function generateLinkedInTeaser(article) {
 
   const client = new GoogleGenAI({ apiKey });
 
-  const prompt = `You are a LinkedIn content expert. Create a SHORT LinkedIn post to tease a blog article.
+  const prompt = `You are a LinkedIn content expert writing on behalf of Gnanamuthu G, an AI & Contact Center specialist.
 
-Blog Article Title: "${article.title}"
-Blog Article Summary: "${article.summary}"
+Create a LinkedIn post to tease this blog article:
+Title: "${article.title}"
+Summary: "${article.summary}"
 Category: ${article.categoryName}
 
 STRICT RULES:
-- EXACTLY 3 lines of text (not 4, not 2 — exactly 3)
-- Line 1: A bold hook question or surprising statement that makes someone stop scrolling
-- Line 2: One specific insight or stat from the topic (make it concrete)
-- Line 3: A call-to-action pointing to the full article
+- 3 to 5 lines of text total
+- Line 1: A powerful hook — surprising fact, bold question, or contrarian statement that stops scrolling
+- Lines 2-3: 1-2 specific insights or practical takeaways from the topic (concrete, not vague)
+- Last line: A clear call-to-action to read the full article
 - End with 3-4 relevant hashtags on a new line
-- DO NOT repeat the blog content word for word — this is a teaser
-- Tone: professional but conversational, like a smart LinkedIn post
-- NO emojis overload — max 2 emojis total
+- Tone: professional, expert, conversational — like a senior AI practitioner sharing knowledge
+- Max 2 emojis total
+- DO NOT copy blog content word for word — this is a unique teaser
+- Sign off style: feels like it's from a real expert, not a bot
 
-Return ONLY the post text. No JSON, no explanation, no quotes around it.
+Return ONLY the post text. No JSON, no explanation, no quotes.
 
-Example format:
-Did you know most customers hang up before speaking to an agent — not because of wait time, but because of bad IVR design?
+Example:
+Most IVR systems fail not because of bad tech — but because of bad design.
 
-Conversational AI reduces that friction by 60% — and the shift is simpler than you think.
+Dialogflow CX changes this by separating your conversation logic into Flows and Pages, making complex bots manageable and scalable.
+
+The key insight: one Flow per business function, one Page per conversation step.
 
 Full breakdown in today's article 👇
 
-#ContactCenter #ConversationalAI #CCAIP #CustomerExperience`;
+#DialogflowCX #ConversationalAI #ContactCenter #CCAIP`;
 
   const response = await client.models.generateContent({
     model: 'gemini-2.5-flash',
@@ -96,7 +100,12 @@ async function postToLinkedIn(text, articleUrl) {
     return { simulated: true };
   }
 
-  const fullText = `${text}\n\n🔗 Read more: ${articleUrl}`;
+  const fullText = `${text}
+
+🔗 Read more: ${articleUrl}
+
+— Gnanamuthu G | AI & Contact Center Expert
+🌐 Portfolio: https://gnanamuthugm.github.io/portfolio/`;
 
   // LinkedIn UGC Post — TEXT ONLY (most reliable, no image upload needed)
   const postBody = {

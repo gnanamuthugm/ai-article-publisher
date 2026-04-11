@@ -12,9 +12,9 @@ export async function generateMetadata({
   params: Promise<{ lang: string }>;
 }): Promise<Metadata> {
   return {
-    title: "CCAIP Daily — One Concept a Day",
+    title: "Learn Daily — One Concept a Day by Gnanamuthu G",
     description:
-      "Master Dialogflow CX, Conversational AI, CES, and CCAIP — one article every morning. Real examples, quizzes, and expert insights.",
+      "Master Dialogflow CX, Conversational AI, CES, and CCAIP — one article every morning by Gnanamuthu G. Real examples, quizzes, and expert insights.",
   };
 }
 
