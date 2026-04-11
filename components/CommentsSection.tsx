@@ -42,7 +42,6 @@ function CommentCard({ c, onEdit }: { c: Comment; onEdit: (c: Comment) => void }
 
   async function handleTranslate() {
     if (translated) {
-      // Toggle between original and translated
       setShowOriginal(prev => !prev);
       return;
     }
@@ -53,8 +52,8 @@ function CommentCard({ c, onEdit }: { c: Comment; onEdit: (c: Comment) => void }
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ comment: c.comment }),
       });
-      const { translated: t } = await res.json();
-      setTranslated(t);
+      const data = await res.json();
+      setTranslated(data.translated ?? c.comment);
       setShowOriginal(false);
     } catch (e) {
       console.error("Translate error:", e);
@@ -63,18 +62,15 @@ function CommentCard({ c, onEdit }: { c: Comment; onEdit: (c: Comment) => void }
   }
 
   const displayText = translated && !showOriginal ? translated : c.comment;
-  const isTranslated = translated && !showOriginal;
+  const isTranslated = !!(translated && !showOriginal);
 
   return (
     <div className="border-t border-gray-100 pt-5">
       <div className="flex gap-3">
-        {/* Avatar */}
         <div className="w-9 h-9 rounded-full bg-blue-100 flex items-center justify-center text-blue-700 text-sm font-bold flex-shrink-0">
           {getInitial(c.name)}
         </div>
-
         <div className="flex-1">
-          {/* Name + date + edit */}
           <div className="flex items-center justify-between flex-wrap gap-1 mb-1">
             <div className="flex items-center gap-2 flex-wrap">
               <span className="font-semibold text-gray-800 text-sm">{c.name}</span>
@@ -90,11 +86,7 @@ function CommentCard({ c, onEdit }: { c: Comment; onEdit: (c: Comment) => void }
               ✏️ Edit
             </button>
           </div>
-
-          {/* Comment text */}
           <p className="text-gray-700 text-sm leading-relaxed mb-2">{displayText}</p>
-
-          {/* Translate button */}
           <div className="flex items-center gap-2">
             <button
               onClick={handleTranslate}
@@ -110,9 +102,7 @@ function CommentCard({ c, onEdit }: { c: Comment; onEdit: (c: Comment) => void }
                 <>
                   🌐{" "}
                   {translated
-                    ? showOriginal
-                      ? "Show translation"
-                      : "Show original"
+                    ? showOriginal ? "Show translation" : "Show original"
                     : "Translate to English"}
                 </>
               )}
@@ -134,15 +124,20 @@ export default function CommentsSection({ articleSlug, className = "" }: Comment
   const [text, setText] = useState("");
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
+  const [submitError, setSubmitError] = useState("");
   const [successMsg, setSuccessMsg] = useState("");
 
-  // Edit state
   const [editingComment, setEditingComment] = useState<Comment | null>(null);
   const [editText, setEditText] = useState("");
   const [editName, setEditName] = useState("");
   const [editSaving, setEditSaving] = useState(false);
 
-  const supabaseReady = !!(supabaseUrl && supabaseKey && supabaseUrl !== "undefined");
+  const supabaseReady = !!(
+    supabaseUrl &&
+    supabaseKey &&
+    supabaseUrl !== "undefined" &&
+    supabaseUrl.startsWith("https://")
+  );
 
   useEffect(() => {
     if (supabaseReady) fetchComments();
@@ -154,12 +149,17 @@ export default function CommentsSection({ articleSlug, className = "" }: Comment
     try {
       const { data, error } = await getSupabase()
         .from("comments")
-        .select("*")
+        .select("id, article_id, name, comment, created_at, updated_at")
         .eq("article_id", articleSlug)
         .order("created_at", { ascending: false });
-      if (!error && data) setComments(data);
-    } catch (e) {
-      console.error("fetchComments error:", e);
+
+      if (error) {
+        console.error("Supabase fetch error:", error.message);
+      } else if (data) {
+        setComments(data);
+      }
+    } catch (e: any) {
+      console.error("fetchComments exception:", e.message);
     }
     setLoading(false);
   }
@@ -167,21 +167,33 @@ export default function CommentsSection({ articleSlug, className = "" }: Comment
   async function handleSubmit() {
     if (!name.trim() || !text.trim()) return;
     setSubmitting(true);
+    setSubmitError("");
+
     try {
+      // Insert WITHOUT updated_at — let Supabase default handle it
       const { data, error } = await getSupabase()
         .from("comments")
-        .insert([{ article_id: articleSlug, name: name.trim(), comment: text.trim(), updated_at: null }])
-        .select()
+        .insert({
+          article_id: articleSlug,
+          name: name.trim(),
+          comment: text.trim(),
+        })
+        .select("id, article_id, name, comment, created_at, updated_at")
         .single();
-      if (!error && data) {
+
+      if (error) {
+        console.error("Supabase insert error:", error.message, error.details);
+        setSubmitError(`Failed to post: ${error.message}`);
+      } else if (data) {
         setComments(prev => [data, ...prev]);
         setName("");
         setText("");
         setSuccessMsg("✅ Comment posted!");
         setTimeout(() => setSuccessMsg(""), 3000);
       }
-    } catch (e) {
-      console.error("submit error:", e);
+    } catch (e: any) {
+      console.error("submit exception:", e.message);
+      setSubmitError("Something went wrong. Please try again.");
     }
     setSubmitting(false);
   }
@@ -204,16 +216,23 @@ export default function CommentsSection({ articleSlug, className = "" }: Comment
     try {
       const { data, error } = await getSupabase()
         .from("comments")
-        .update({ comment: editText.trim(), name: editName.trim(), updated_at: new Date().toISOString() })
+        .update({
+          comment: editText.trim(),
+          name: editName.trim(),
+          updated_at: new Date().toISOString(),
+        })
         .eq("id", editingComment.id)
-        .select()
+        .select("id, article_id, name, comment, created_at, updated_at")
         .single();
-      if (!error && data) {
+
+      if (error) {
+        console.error("Supabase update error:", error.message);
+      } else if (data) {
         setComments(prev => prev.map(c => c.id === editingComment.id ? data : c));
         cancelEdit();
       }
-    } catch (e) {
-      console.error("edit error:", e);
+    } catch (e: any) {
+      console.error("edit exception:", e.message);
     }
     setEditSaving(false);
   }
@@ -221,7 +240,6 @@ export default function CommentsSection({ articleSlug, className = "" }: Comment
   return (
     <div className={className}>
       <div className="bg-white border border-gray-200 rounded-2xl p-6 shadow-sm">
-        {/* Header */}
         <h3 className="font-bold text-gray-800 text-lg mb-6 flex items-center gap-2">
           💬 Comments
           {!loading && (
@@ -231,7 +249,7 @@ export default function CommentsSection({ articleSlug, className = "" }: Comment
 
         {!supabaseReady ? (
           <div className="bg-yellow-50 border border-yellow-200 rounded-xl p-4 text-sm text-yellow-700">
-            ⚠️ Comments require Supabase. Configure NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY.
+            ⚠️ Comments require Supabase configuration.
           </div>
         ) : (
           <>
@@ -257,6 +275,7 @@ export default function CommentsSection({ articleSlug, className = "" }: Comment
                 />
               </div>
               {successMsg && <p className="text-green-600 text-sm mt-2">{successMsg}</p>}
+              {submitError && <p className="text-red-500 text-sm mt-2">❌ {submitError}</p>}
               <button
                 onClick={handleSubmit}
                 disabled={submitting || !name.trim() || !text.trim()}
@@ -266,10 +285,10 @@ export default function CommentsSection({ articleSlug, className = "" }: Comment
               </button>
             </div>
 
-            {/* Edit Modal */}
+            {/* Edit Panel */}
             {editingComment && (
               <div className="mb-6 bg-blue-50 border border-blue-200 rounded-xl p-4">
-                <p className="text-xs font-semibold text-blue-700 mb-3">✏️ Editing comment</p>
+                <p className="text-xs font-semibold text-blue-700 mb-3">✏️ Editing your comment</p>
                 <input
                   type="text"
                   value={editName}
