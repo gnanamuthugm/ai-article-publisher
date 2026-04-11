@@ -23,7 +23,7 @@ IMPORTANT RULES:
 2. Only translate the TEXT content inside the HTML tags
 3. Keep technical terms like "Dialogflow CX", "CCAIP", "IVR", "NLP", "API", "CES", "NPS", "CSAT", "FCR", "AHT" in English
 4. Make the translation natural and easy to understand for a beginner
-5. Return ONLY the translated HTML — no explanation, no markdown fences
+5. Return ONLY the translated HTML - no explanation, no markdown fences
 
 HTML to translate:
 ${content}`;
@@ -34,6 +34,7 @@ ${content}`;
     });
 
     const rawText = response.text ?? content;
+    
     const translated = rawText
       .trim()
       .replace(/^```html\s*/i, "")
@@ -44,6 +45,6 @@ ${content}`;
     return NextResponse.json({ translated });
   } catch (error: any) {
     console.error("Translation error:", error);
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    return NextResponse.json({ error: error.message || "Translation failed" }, { status: 500 });
   }
 }
