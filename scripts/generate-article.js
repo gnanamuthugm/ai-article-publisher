@@ -11,69 +11,125 @@ require('dotenv').config({ path: '.env.local' });
 // - Updates data/articles.json (used by the website)
 // ============================================================
 
-// 60 CCAIP topics — one per day, cycling automatically
+// 100+ CCAIP-specific topics - ONLY Contact Center AI and Conversational AI topics
 const CCAIP_TOPICS = [
-  "IVR vs Conversational AI - Key Differences",
-  "What is CCAIP and Why It Matters",
-  "Omnichannel vs Multichannel Contact Centers",
-  "Role of AI in Modern Contact Centers",
-  "Understanding NLP in Customer Service",
-  "Speech Analytics in Contact Centers",
-  "Agent Assist Tools - How AI Helps Agents",
-  "Customer Effort Score (CES) Explained",
-  "First Call Resolution (FCR) Best Practices",
-  "Real-Time Transcription in Contact Centers",
-  "Sentiment Analysis for Customer Interactions",
-  "Voice Biometrics and Authentication",
-  "Chatbots vs Virtual Agents - Key Differences",
-  "Workforce Management (WFM) in CCAIP",
-  "Quality Management (QM) in Contact Centers",
-  "CRM Integration with Contact Center Platforms",
-  "Customer Journey Mapping for Contact Centers",
-  "Call Routing Strategies - Skills-Based Routing",
-  "Predictive Dialer vs Progressive Dialer",
-  "Cloud Contact Center vs On-Premise Solutions",
-  "Average Handle Time (AHT) Reduction Strategies",
-  "Net Promoter Score (NPS) in Contact Centers",
+  "CCAIP Fundamentals - Complete Overview",
+  "Contact Center AI vs Traditional IVR Systems",
+  "Dialogflow CX Essentials for Contact Centers",
+  "Google CCAI Platform Architecture",
+  "Conversational AI in Customer Service",
+  "Voice Bots vs Chatbots in Contact Centers",
+  "IVR Modernization with AI Integration",
+  "Contact Center Queue Management with AI",
+  "Skills-Based Routing with Machine Learning",
+  "Predictive Routing in Contact Centers",
+  "Agent Assist AI Tools and Implementation",
+  "Real-Time Agent Guidance Systems",
+  "Supervisor Workspaces and Monitoring",
+  "Contact Center Analytics and Reporting",
+  "Customer Journey Mapping in CCAIP",
+  "Omnichannel Customer Experience Strategy",
+  "Digital Channel Integration - Email, Chat, Social",
+  "Webhooks in Contact Center Integrations",
+  "API Integration for Contact Center Platforms",
+  "SLA Management in AI-Powered Contact Centers",
+  "Service Level Agreements - Implementation and Monitoring",
+  "Customer Support Automation Strategies",
+  "Self-Service Portals and AI Integration",
+  "Knowledge Base Management for Contact Centers",
+  "Intent Recognition in Conversational Flows",
+  "Entity Extraction in Customer Conversations",
+  "Natural Language Processing for Contact Centers",
+  "Speech-to-Text in Real-Time Customer Service",
+  "Text-to-Speech for Contact Center Applications",
+  "Voice Biometrics and Authentication Systems",
+  "Sentiment Analysis in Customer Interactions",
+  "Emotion AI for Customer Experience",
+  "Customer Effort Score (CES) Optimization",
+  "First Call Resolution (FCR) with AI",
+  "Average Handle Time (AHT) Reduction",
+  "After-Call Work (ACW) Automation",
+  "Call Wrap-Up Time Optimization",
   "Customer Satisfaction (CSAT) Measurement",
-  "Interaction Analytics - Turning Data into Insights",
-  "Contact Center as a Service (CCaaS) Overview",
-  "Auto Summarization - AI Post-Call Notes",
-  "Intent Detection in Conversational AI",
-  "Escalation Management in AI-Powered Centers",
-  "Digital Channels - Email, Chat, Social Integration",
-  "Contact Center KPIs Every Manager Should Know",
-  "Self-Service Automation - Reducing Agent Load",
-  "Google CCAI Platform Overview",
-  "Dialogflow CX - Building Advanced Conversational Flows",
-  "Agent Desktop Modernization",
-  "Knowledge Base Integration in Contact Centers",
-  "Proactive Customer Outreach with AI",
-  "Data Privacy and Compliance in Contact Centers",
-  "GDPR and CCPA Impact on Contact Centers",
-  "Hybrid Work Models in Contact Centers",
+  "Net Promoter Score (NPS) in Contact Centers",
+  "Customer Lifetime Value (CLV) Strategies",
+  "Contact Center KPIs and Metrics",
+  "Workforce Management (WFM) with AI",
+  "Quality Management (QM) Automation",
   "Call Recording and Compliance",
-  "Supervisor Dashboards and Real-Time Monitoring",
-  "Coaching and Training with AI Insights",
-  "Wrap-Up Time Reduction Strategies",
-  "Contact Center Automation ROI Calculation",
-  "Multimodal AI in Customer Service",
-  "Voice AI vs Text AI in Customer Support",
-  "Intelligent Virtual Assistants (IVA) Deep Dive",
-  "Emotion AI in Contact Centers",
-  "Customer Lifetime Value and Contact Centers",
-  "Abandonment Rate - Causes and Solutions",
-  "Service Level Agreement (SLA) in Contact Centers",
-  "After-Call Work (ACW) Optimization",
-  "Blended Agent Model - Voice + Digital",
-  "Contact Center Reporting Best Practices",
-  "AI Hallucination Risks in Customer Service",
+  "Data Privacy in Contact Center AI",
+  "GDPR Compliance for Contact Centers",
+  "CCPA Impact on Customer Data",
+  "Contact Center as a Service (CCaaS)",
+  "Cloud vs On-Premise Contact Centers",
+  "Hybrid Contact Center Models",
+  "Multi-Tenant Contact Center Architecture",
+  "Scalability in Contact Center AI",
+  "Contact Center Disaster Recovery",
+  "Business Continuity Planning",
+  "Contact Center ROI Calculation",
+  "AI Implementation Cost-Benefit Analysis",
+  "Building Business Case for CCAIP",
+  "Contact Center AI Vendor Selection",
+  "Google Cloud AI Contact Center Features",
+  "Amazon Connect AI Capabilities",
+  "Microsoft Azure Contact Center Solutions",
+  "Five9 AI Integration",
+  "Genesys AI Platform",
+  "Twilio Contact Center AI",
+  "Vonage Contact Center AI Features",
+  "Avaya AI-Powered Contact Centers",
+  "Cisco Contact Center AI Solutions",
+  "Talkdesk AI Capabilities",
+  "LivePerson Conversational AI",
+  "Intercom AI for Customer Service",
+  "Zendesk AI Integration",
+  "Salesforce Einstein for Service",
+  "HubSpot AI for Customer Support",
+  "Freshworks AI Contact Center",
+  "AI Training Data for Contact Centers",
+  "Machine Learning Models for Customer Service",
+  "Deep Learning in Conversational AI",
   "Large Language Models in Contact Centers",
-  "Google Cloud Contact Center AI Features",
-  "CCAIP Certification - What to Study",
-  "Future of Contact Centers - 2025 and Beyond",
-  "Building a Business Case for CCAIP Investment",
+  "GPT Integration in Customer Service",
+  "BERT for Customer Intent Classification",
+  "Transformer Models in Contact Centers",
+  "AI Hallucination Risks in Customer Service",
+  "AI Ethics in Contact Center Operations",
+  "Bias in AI Customer Service Systems",
+  "Explainable AI for Contact Centers",
+  "Contact Center AI Testing and Validation",
+  "AI Model Monitoring and Maintenance",
+  "Continuous Learning in Contact Center AI",
+  "A/B Testing for AI Customer Service",
+  "Contact Center AI Performance Metrics",
+  "AI Model Accuracy in Customer Service",
+  "False Positive Reduction in AI Systems",
+  "Contact Center AI Security Best Practices",
+  "Cybersecurity in AI-Powered Contact Centers",
+  "Fraud Detection in Contact Center AI",
+  "Voice Cloning and Deepfake Protection",
+  "Contact Center AI Future Trends",
+  "2025 Contact Center AI Predictions",
+  "Emerging Technologies in Customer Service",
+  "Metaverse and Contact Centers",
+  "AR/VR in Customer Support",
+  "5G Impact on Contact Center AI",
+  "Edge Computing for Contact Centers",
+  "Blockchain in Contact Center Operations",
+  "IoT Integration with Contact Centers",
+  "Contact Center AI Certification Guide",
+  "CCAIP Exam Preparation",
+  "Google Cloud CCAI Certification",
+  "Contact Center AI Training Programs",
+  "Skills Development for AI Contact Centers",
 ];
+
+// Random topic selection from CCAIP topics
+function getRandomCCAIPTopic() {
+  const randomIndex = Math.floor(Math.random() * CCAIP_TOPICS.length);
+  return CCAIP_TOPICS[randomIndex];
+}
 
 const CONFIG = {
   articlesJsonPath: path.join(process.cwd(), 'data', 'articles.json'),
@@ -98,38 +154,45 @@ async function generateArticleJSON(topic) {
 
   const client = new GoogleGenAI({ apiKey });
 
-  const prompt = `You are a CCAIP (Contact Center AI Platform) expert and educator.
+  const prompt = `You are a CCAIP (Contact Center AI Platform) expert and educator specializing ONLY in Contact Center AI and Conversational AI topics.
 
-Generate a structured daily learning article about: "${topic}"
+IMPORTANT RESTRICTIONS:
+- Generate content ONLY about Contact Center AI, Conversational AI, IVR, Voice Bots, Chatbots, Dialogflow CX, Queue Management, Agent Routing, SLA, Customer Support Automation, and related contact center technologies.
+- DO NOT generate content about React, JavaScript, frontend development, web development, software engineering, or general programming topics.
+- Focus exclusively on customer service automation, contact center operations, and AI-powered customer interactions.
+
+Generate a professional technical blog article about: "${topic}"
+
+The article should be written in a professional technical blog style suitable for CCAIP professionals and contact center managers.
 
 Return ONLY a valid JSON object with this exact structure (no markdown, no code fences):
 {
-  "title": "Engaging article title",
-  "summary": "One sentence summary of what the reader will learn today",
-  "content": "Full HTML article body (use <h2>, <p>, <ul>, <li>, <strong> tags). Must include: Introduction, 3-5 Key Concepts with explanations, Practical Use Case with measurable results. Minimum 600 words.",
-  "realWorldExample": "A specific real-world example (2-3 sentences) showing how a company used this concept",
+  "title": "Professional technical article title focusing on CCAIP",
+  "summary": "One sentence summary of what CCAIP professionals will learn",
+  "content": "Full HTML article body (use <h2>, <p>, <ul>, <li>, <strong> tags). Must include: Introduction, 3-5 Key Concepts with detailed explanations, Real-world Implementation Strategy, Performance Metrics and ROI analysis. Minimum 800 words. Focus on practical contact center applications.",
+  "realWorldExample": "A specific real-world example (2-3 sentences) showing how a contact center implemented this CCAIP solution with measurable results",
   "keyPoints": [
-    "Key takeaway 1",
-    "Key takeaway 2",
-    "Key takeaway 3",
-    "Key takeaway 4",
-    "Key takeaway 5"
+    "Key CCAIP takeaway 1",
+    "Key CCAIP takeaway 2", 
+    "Key CCAIP takeaway 3",
+    "Key CCAIP takeaway 4",
+    "Key CCAIP takeaway 5"
   ],
-  "imageQuery": "A 3-4 word Unsplash search query relevant to the topic (e.g. 'contact center office', 'customer service ai', 'call center technology')",
-  "tags": ["tag1", "tag2", "tag3"],
+  "imageQuery": "A 3-4 word Unsplash search query relevant to contact center AI (e.g. 'contact center technology', 'customer service ai', 'call center operations', 'ai customer support')",
+  "tags": ["ccaip", "contact-center-ai", "conversational-ai"],
   "quiz": [
     {
-      "question": "Question text here?",
+      "question": "Technical question about CCAIP implementation?",
       "options": ["A. Option one", "B. Option two", "C. Option three", "D. Option four"],
       "answer": "A"
     },
     {
-      "question": "Question text here?",
+      "question": "Question about contact center AI best practices?",
       "options": ["A. Option one", "B. Option two", "C. Option three", "D. Option four"],
       "answer": "B"
     },
     {
-      "question": "Question text here?",
+      "question": "Question about conversational AI in customer service?",
       "options": ["A. Option one", "B. Option two", "C. Option three", "D. Option four"],
       "answer": "C"
     }
@@ -207,30 +270,46 @@ function saveArticles(articles) {
   console.log(`💾 articles.json updated (${articles.length} total articles)`);
 }
 
-// ── Save markdown backup ──
-function saveMarkdown(topic, articleData) {
-  if (!fs.existsSync(CONFIG.contentDir)) {
-    fs.mkdirSync(CONFIG.contentDir, { recursive: true });
-  }
+// 6. Save multilingual markdown backup
+function saveMultilingualMarkdown(topic, articleData) {
   const today = new Date().toISOString().split('T')[0];
   const slug = createSlug(topic);
-  const filepath = path.join(CONFIG.contentDir, `${today}-${slug}.md`);
-  const md = `---
+  const cleanContent = articleData.content.replace(/<[^>]+>/g, '');
+  
+  // Languages to generate content for
+  const languages = ['en', 'ta', 'hi', 'te'];
+  
+  languages.forEach(lang => {
+    const langDir = path.join(CONFIG.contentDir, lang);
+    if (!fs.existsSync(langDir)) {
+      fs.mkdirSync(langDir, { recursive: true });
+    }
+    
+    const filepath = path.join(langDir, `${slug}.md`);
+    
+    // For now, use the same content for all languages
+    // In the future, you could translate the content
+    const md = `---
 title: "${articleData.title}"
-date: ${today}
+description: "${articleData.summary}"
+author: "CCAIP Daily"
+publishedAt: "${today}"
+category: "technology"
+tags: ${JSON.stringify(articleData.tags || ['ccaip', 'contact-center-ai'])}
 ---
 
-${articleData.content.replace(/<[^>]+>/g, '')}
+${cleanContent}
 `;
-  fs.writeFileSync(filepath, md, 'utf8');
-  console.log(`📄 Markdown saved: ${path.basename(filepath)}`);
+    fs.writeFileSync(filepath, md, 'utf8');
+    console.log(`? Markdown saved (${lang}): ${path.basename(filepath)}`);
+  });
 }
 
 // ── Main ──
 async function main() {
   console.log('\n🚀 CCAIP Daily Article Generator Starting...\n');
 
-  const topic = getTodaysTopic();
+  const topic = getRandomCCAIPTopic();
   const today = new Date().toISOString().split('T')[0];
   const slug = `${today}-${createSlug(topic)}`;
 
@@ -274,10 +353,10 @@ async function main() {
   // 5. Save articles.json
   saveArticles(articles);
 
-  // 6. Save markdown backup
-  saveMarkdown(topic, articleData);
+  // 6. Save markdown backup in multiple languages
+  saveMultilingualMarkdown(topic, articleData);
 
-  console.log(`\n🎉 Done! Article "${newArticle.title}" added to website.\n`);
+  console.log(`\n? Done! Article "${newArticle.title}" added to website.\n`);
 }
 
 main().catch(err => {
