@@ -1,0 +1,41 @@
+name: Generate Daily CCAIP Article
+
+on:
+  schedule:
+    - cron: '0 4 * * *'  # 9:30 AM IST every day (IST = UTC+5:30)
+  workflow_dispatch:       # Manual trigger from GitHub UI
+
+jobs:
+  generate:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Generate today's article
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          UNSPLASH_ACCESS_KEY: ${{ secrets.UNSPLASH_ACCESS_KEY }}
+        run: node scripts/generate-article.js
+
+      - name: Commit and push new article
+        run: |
+          git config user.name "CCAIP Bot"
+          git config user.email "bot@ccaip-daily.com"
+          git add data/articles.json content/articles/
+          git diff --staged --quiet || git commit -m "📚 Daily article - $(date +'%Y-%m-%d')"
+          git push
