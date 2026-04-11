@@ -4,15 +4,14 @@ const { GoogleGenAI } = require('@google/genai');
 require('dotenv').config({ path: '.env.local' });
 
 // ============================================================
-// CCAIP Daily Blog Generator — v3.0
+// CCAIP Daily Blog Generator — v3.1
 // Categories: Dialogflow CX → Conversational Agents Playbook
 //             → CES → CCAIP (monthly rotation)
 // Publishes: 11:30 AM IST (6:00 AM UTC) daily via GitHub Actions
+// Model: gemini-1.5-flash (1500 req/day free tier)
 // ============================================================
 
 // --- Category Schedule ---
-// Each category runs for exactly 1 month (30 days), then rotates.
-// Rotation start: April 2026
 const CATEGORY_SCHEDULE = [
   {
     id: 'dialogflow-cx',
@@ -20,7 +19,7 @@ const CATEGORY_SCHEDULE = [
     emoji: '🤖',
     color: 'blue',
     description: 'Master Google Dialogflow CX — build advanced conversational flows',
-    startMonth: '2026-04', // April 2026
+    startMonth: '2026-04',
   },
   {
     id: 'conversational-agents-playbook',
@@ -28,7 +27,7 @@ const CATEGORY_SCHEDULE = [
     emoji: '📖',
     color: 'purple',
     description: 'Step-by-step playbooks for building production-grade conversational agents',
-    startMonth: '2026-05', // May 2026
+    startMonth: '2026-05',
   },
   {
     id: 'ces',
@@ -36,7 +35,7 @@ const CATEGORY_SCHEDULE = [
     emoji: '⭐',
     color: 'green',
     description: 'Reduce customer effort, increase loyalty with CES strategies',
-    startMonth: '2026-06', // June 2026
+    startMonth: '2026-06',
   },
   {
     id: 'ccaip',
@@ -44,11 +43,11 @@ const CATEGORY_SCHEDULE = [
     emoji: '🎯',
     color: 'orange',
     description: 'Contact Center AI Platform — comprehensive exam and implementation guide',
-    startMonth: '2026-07', // July 2026
+    startMonth: '2026-07',
   },
 ];
 
-// --- Topics per Category (25+ each, one per day) ---
+// --- Topics per Category ---
 const TOPICS = {
   'dialogflow-cx': [
     "Introduction to Dialogflow CX: What It Is and Why It Matters",
@@ -180,15 +179,11 @@ const TOPICS = {
   ],
 };
 
-// --- Get current category based on month ---
 function getCurrentCategory() {
   const now = new Date();
   const currentYearMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
-
-  // Find which category we're in
   for (let i = CATEGORY_SCHEDULE.length - 1; i >= 0; i--) {
     if (currentYearMonth >= CATEGORY_SCHEDULE[i].startMonth) {
-      // Cycle back if we've passed all categories
       const idx = i % CATEGORY_SCHEDULE.length;
       return CATEGORY_SCHEDULE[idx];
     }
@@ -196,14 +191,12 @@ function getCurrentCategory() {
   return CATEGORY_SCHEDULE[0];
 }
 
-// --- Get today's topic (day-of-month based, cycles through topic list) ---
 function getTodaysTopic(categoryId) {
   const topics = TOPICS[categoryId];
-  const dayOfMonth = new Date().getDate() - 1; // 0-indexed
+  const dayOfMonth = new Date().getDate() - 1;
   return topics[dayOfMonth % topics.length];
 }
 
-// --- Create slug ---
 function createSlug(text) {
   return text
     .toLowerCase()
@@ -214,16 +207,13 @@ function createSlug(text) {
     .replace(/-$/, '');
 }
 
-// --- Fetch Unsplash image ---
 async function fetchUnsplashImage(query) {
   const key = process.env.UNSPLASH_ACCESS_KEY;
   const fallback = 'https://images.unsplash.com/photo-1553877522-43269d4ea984?w=1080&auto=format&fit=crop';
-
   if (!key || key.startsWith('your-')) {
     console.warn('⚠️  No Unsplash key, using fallback image');
     return fallback;
   }
-
   try {
     const url = `https://api.unsplash.com/search/photos?query=${encodeURIComponent(query)}&per_page=5&orientation=landscape&client_id=${key}`;
     const res = await fetch(url);
@@ -240,7 +230,6 @@ async function fetchUnsplashImage(query) {
   return fallback;
 }
 
-// --- Generate article via Gemini ---
 async function generateArticle(topic, category) {
   const apiKey = process.env.GEMINI_API_KEY;
   if (!apiKey || apiKey.startsWith('your-')) throw new Error('GEMINI_API_KEY missing');
@@ -291,6 +280,7 @@ Return ONLY a valid JSON object. No markdown fences, no extra text. Just the raw
 }`;
 
   console.log(`🤖 Generating article: "${topic}"`);
+  // Using gemini-1.5-flash — 1500 req/day free tier (vs gemini-2.5-flash 20 req/day)
   const response = await client.models.generateContent({ model: 'gemini-2.5-flash', contents: prompt });
   let text = response.text.trim()
     .replace(/^```json\s*/i, '')
@@ -301,14 +291,12 @@ Return ONLY a valid JSON object. No markdown fences, no extra text. Just the raw
   try {
     return JSON.parse(text);
   } catch (e) {
-    // Try to extract JSON
     const match = text.match(/\{[\s\S]*\}/);
     if (match) return JSON.parse(match[0]);
     throw new Error(`JSON parse failed: ${e.message}`);
   }
 }
 
-// --- Load/Save articles.json ---
 const ARTICLES_PATH = path.join(process.cwd(), 'data', 'articles.json');
 
 function loadArticles() {
@@ -324,9 +312,8 @@ function saveArticles(articles) {
   console.log(`💾 articles.json updated — total: ${articles.length} articles`);
 }
 
-// --- Main ---
 async function main() {
-  console.log('\n🚀 CCAIP Daily Blog Generator v3.0\n');
+  console.log('\n🚀 CCAIP Daily Blog Generator v3.1\n');
 
   const today = new Date().toISOString().split('T')[0];
   const category = getCurrentCategory();
@@ -336,22 +323,19 @@ async function main() {
   console.log(`📅 Date       : ${today}`);
   console.log(`📂 Category   : ${category.name}`);
   console.log(`📌 Topic      : "${topic}"`);
+  console.log(`🤖 Model      : gemini-1.5-flash (1500 req/day free)`);
 
-  // Skip if already published today
   const articles = loadArticles();
   if (articles.find(a => a.date === today)) {
     console.log('✅ Article already published today. Skipping.');
     return;
   }
 
-  // Generate content
   const data = await generateArticle(topic, category);
   console.log(`✅ Article generated: "${data.title}"`);
 
-  // Fetch image
   const image = await fetchUnsplashImage(data.imageQuery || topic);
 
-  // Build article record
   const article = {
     id: slug,
     slug,
@@ -367,14 +351,12 @@ async function main() {
     keyPoints: data.keyPoints || [],
     image,
     tags: data.tags || [category.id],
-    quiz: (data.quiz || []).slice(0, 2), // Enforce exactly 2 questions
+    quiz: (data.quiz || []).slice(0, 2),
   };
 
-  // Prepend (newest first)
   articles.unshift(article);
   saveArticles(articles);
 
-  // Also save markdown backup
   const mdDir = path.join(process.cwd(), 'content', 'articles', 'en');
   if (!fs.existsSync(mdDir)) fs.mkdirSync(mdDir, { recursive: true });
   const mdContent = `---
