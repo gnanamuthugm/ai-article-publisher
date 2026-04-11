@@ -33,7 +33,9 @@ ${content}`;
       contents: prompt,
     });
 
-    let translated = response.text.trim()
+    const rawText = response.text ?? content;
+    const translated = rawText
+      .trim()
       .replace(/^```html\s*/i, "")
       .replace(/^```\s*/i, "")
       .replace(/```\s*$/i, "")

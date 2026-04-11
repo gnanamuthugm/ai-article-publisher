@@ -27,8 +27,8 @@ Comment: "${comment}"`;
       contents: prompt,
     });
 
-    const translated = response.text.trim();
-    return NextResponse.json({ translated });
+    const translated = response.text ?? comment;
+    return NextResponse.json({ translated: translated.trim() });
   } catch (error: any) {
     console.error("Comment translate error:", error);
     return NextResponse.json({ error: error.message }, { status: 500 });
