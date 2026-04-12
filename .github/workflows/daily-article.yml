@@ -5,8 +5,8 @@ on:
     branches:
       - main
   schedule:
-    - cron: '*/15 * * * *'   # TEST: Every 15 minutes
-    # - cron: '0 6 * * *'    # PRODUCTION: 11:30 AM IST
+    # - cron: '*/15 * * * *'   # TEST: Every 15 minutes
+    - cron: '0 6 * * *'    # PRODUCTION: 11:30 AM IST
   workflow_dispatch:
 
 jobs:
