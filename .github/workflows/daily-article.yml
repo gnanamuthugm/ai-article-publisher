@@ -3,7 +3,7 @@ name: Daily CCAIP Blog Publisher
 on:
   schedule:
     - cron: '*/5 * * * *'   # TEST: Every 5 minutes
-    # - cron: '0 6 * * *'   # PRODUCTION: 11:30 AM IST daily (uncomment when done testing)
+    # - cron: '0 6 * * *'   # PRODUCTION: 11:30 AM IST (uncomment after testing)
   workflow_dispatch:
 
 jobs:
@@ -31,6 +31,8 @@ jobs:
         env:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
           UNSPLASH_ACCESS_KEY: ${{ secrets.UNSPLASH_ACCESS_KEY }}
+          NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
+          NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY }}
         run: node scripts/generate-daily-blog.js
 
       - name: Commit and push article
@@ -48,6 +50,8 @@ jobs:
           LINKEDIN_ACCESS_TOKEN: ${{ secrets.LINKEDIN_ACCESS_TOKEN }}
           LINKEDIN_PERSON_URN: ${{ secrets.LINKEDIN_PERSON_URN }}
           BLOG_BASE_URL: ${{ secrets.BLOG_BASE_URL }}
+          NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
+          NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY }}
         run: node scripts/post-to-linkedin.js
 
       - name: Commit LinkedIn log

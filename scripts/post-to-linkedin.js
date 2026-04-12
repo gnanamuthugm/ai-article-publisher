@@ -3,84 +3,81 @@ const path = require('path');
 const { GoogleGenAI } = require('@google/genai');
 require('dotenv').config({ path: '.env.local' });
 
-// ============================================================
-// LinkedIn Daily Auto-Post — v2.0
-// Posts a SHORT teaser (text only + blog URL) daily
-// NOTE: LinkedIn API does not support external image URLs directly.
-// We post text-only with article link (clean and reliable).
-// ============================================================
-
 const ARTICLES_PATH = path.join(process.cwd(), 'data', 'articles.json');
 const LINKEDIN_LOG_PATH = path.join(process.cwd(), 'data', 'linkedin-posts.json');
 
 const BLOG_BASE_URL = process.env.BLOG_BASE_URL || 'https://ai-article-publisher.vercel.app';
 const LINKEDIN_ACCESS_TOKEN = process.env.LINKEDIN_ACCESS_TOKEN;
 const LINKEDIN_PERSON_URN = process.env.LINKEDIN_PERSON_URN;
+const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL;
+const SUPABASE_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
-// ── Generate LinkedIn teaser via Gemini ──
+async function supabaseInsert(table, record) {
+  if (!SUPABASE_URL || !SUPABASE_KEY) return;
+  try {
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/${table}`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'apikey': SUPABASE_KEY,
+        'Authorization': `Bearer ${SUPABASE_KEY}`,
+        'Prefer': 'return=minimal',
+      },
+      body: JSON.stringify(record),
+    });
+    if (res.ok) console.log(`✅ Supabase [${table}] saved`);
+    else console.warn(`⚠️  Supabase [${table}]:`, await res.text());
+  } catch (e) {
+    console.warn(`⚠️  Supabase [${table}] failed:`, e.message);
+  }
+}
+
 async function generateLinkedInTeaser(article) {
   const apiKey = process.env.GEMINI_API_KEY;
   if (!apiKey) throw new Error('GEMINI_API_KEY missing');
-
   const client = new GoogleGenAI({ apiKey });
 
-  const prompt = `You are a LinkedIn content expert writing on behalf of Gnanamuthu G, an AI & Contact Center specialist.
+  const prompt = `You are a LinkedIn content expert. Write a LinkedIn post for this article:
 
-Create a LinkedIn post to tease this blog article:
 Title: "${article.title}"
 Summary: "${article.summary}"
 Category: ${article.categoryName}
 
 STRICT RULES:
-- 3 to 5 lines of text total
-- Line 1: A powerful hook — surprising fact, bold question, or contrarian statement that stops scrolling
-- Lines 2-3: 1-2 specific insights or practical takeaways from the topic (concrete, not vague)
-- Last line: A clear call-to-action to read the full article
-- End with 3-4 relevant hashtags on a new line
-- Tone: professional, expert, conversational — like a senior AI practitioner sharing knowledge
-- Max 2 emojis total
-- DO NOT copy blog content word for word — this is a unique teaser
-- Sign off style: feels like it's from a real expert, not a bot
+- 3 to 5 lines of engaging text only
+- Line 1: Powerful hook (surprising fact, bold question, or contrarian statement)
+- Lines 2-3: 1-2 specific insights or key takeaways
+- Last line: Call-to-action like "Read today's article 👇"
+- New line with 3-4 relevant hashtags
+- Max 2 emojis in main text
+- NO signatures, NO "— Name", NO portfolio links
+- Professional conversational tone
 
-Return ONLY the post text. No JSON, no explanation, no quotes.
+Return ONLY the post text. Nothing else.`;
 
-Example:
-Most IVR systems fail not because of bad tech — but because of bad design.
-
-Dialogflow CX changes this by separating your conversation logic into Flows and Pages, making complex bots manageable and scalable.
-
-The key insight: one Flow per business function, one Page per conversation step.
-
-Full breakdown in today's article 👇
-
-#DialogflowCX #ConversationalAI #ContactCenter #CCAIP`;
-
-  const response = await client.models.generateContent({
-    model: 'gemini-2.5-flash',
-    contents: prompt,
-  });
-
-  return response.text.trim();
+  // Try multiple models
+  const models = ['gemini-2.0-flash', 'gemini-2.0-flash-lite', 'gemini-1.5-flash-latest'];
+  for (const model of models) {
+    try {
+      const response = await client.models.generateContent({ model, contents: prompt });
+      return response.text.trim();
+    } catch (e) {
+      console.warn(`⚠️  Model ${model} failed:`, e.message.substring(0, 60));
+    }
+  }
+  throw new Error('All Gemini models failed for LinkedIn teaser');
 }
 
-// ── Load today's published article ──
 function getTodaysArticle() {
   const today = new Date().toISOString().split('T')[0];
   try {
     const articles = JSON.parse(fs.readFileSync(ARTICLES_PATH, 'utf8'));
     return articles.find(a => a.date === today) || articles[0];
-  } catch {
-    return null;
-  }
+  } catch { return null; }
 }
 
-// ── Load/Save LinkedIn post log ──
 function loadPostLog() {
-  try {
-    return JSON.parse(fs.readFileSync(LINKEDIN_LOG_PATH, 'utf8'));
-  } catch {
-    return [];
-  }
+  try { return JSON.parse(fs.readFileSync(LINKEDIN_LOG_PATH, 'utf8')); } catch { return []; }
 }
 
 function savePostLog(log) {
@@ -89,45 +86,31 @@ function savePostLog(log) {
   fs.writeFileSync(LINKEDIN_LOG_PATH, JSON.stringify(log, null, 2), 'utf8');
 }
 
-// ── Post to LinkedIn via API (text only — most reliable) ──
-async function postToLinkedIn(text, articleUrl) {
+async function postToLinkedIn(teaserText, articleUrl) {
   if (!LINKEDIN_ACCESS_TOKEN || !LINKEDIN_PERSON_URN) {
-    console.log('\n⚠️  LinkedIn credentials not set. Simulated post:\n');
+    console.log('\n⚠️  No LinkedIn credentials — simulated post:\n');
     console.log('─'.repeat(60));
-    console.log(text);
+    console.log(teaserText);
     console.log(`\n🔗 Read more: ${articleUrl}`);
     console.log('─'.repeat(60));
     return { simulated: true };
   }
 
-  const fullText = `${text}
+  const fullText = `${teaserText}\n\n🔗 Read more: ${articleUrl}`;
 
-🔗 Read more: ${articleUrl}
-
-— Gnanamuthu G | AI & Contact Center Expert
-🌐 Portfolio: https://gnanamuthugm.github.io/portfolio/`;
-
-  // LinkedIn UGC Post — TEXT ONLY (most reliable, no image upload needed)
   const postBody = {
     author: LINKEDIN_PERSON_URN,
     lifecycleState: 'PUBLISHED',
     specificContent: {
       'com.linkedin.ugc.ShareContent': {
-        shareCommentary: {
-          text: fullText,
-        },
+        shareCommentary: { text: fullText },
         shareMediaCategory: 'NONE',
       },
     },
-    visibility: {
-      'com.linkedin.ugc.MemberNetworkVisibility': 'PUBLIC',
-    },
+    visibility: { 'com.linkedin.ugc.MemberNetworkVisibility': 'PUBLIC' },
   };
 
   console.log('\n📤 Posting to LinkedIn...');
-  console.log('👤 Author URN:', LINKEDIN_PERSON_URN);
-  console.log('📝 Post preview:\n', fullText.substring(0, 100), '...\n');
-
   const res = await fetch('https://api.linkedin.com/v2/ugcPosts', {
     method: 'POST',
     headers: {
@@ -139,56 +122,38 @@ async function postToLinkedIn(text, articleUrl) {
   });
 
   const responseText = await res.text();
-
-  if (!res.ok) {
-    console.error('❌ LinkedIn API Response:', responseText);
-    throw new Error(`LinkedIn API error ${res.status}: ${responseText}`);
-  }
-
-  console.log('✅ LinkedIn API Response:', responseText);
+  if (!res.ok) throw new Error(`LinkedIn API ${res.status}: ${responseText}`);
   return JSON.parse(responseText);
 }
 
-// ── Main ──
 async function main() {
-  console.log('\n📣 LinkedIn Auto-Post Generator v2.0\n');
-
-  // Validate credentials
-  console.log('🔑 Token present:', !!LINKEDIN_ACCESS_TOKEN);
-  console.log('👤 URN present:', !!LINKEDIN_PERSON_URN);
-  console.log('🌐 Blog URL:', BLOG_BASE_URL);
+  console.log('\n📣 LinkedIn Auto-Post v2.2\n');
 
   const article = getTodaysArticle();
   if (!article) {
-    console.error('❌ No article found. Run generate-daily-blog.js first.');
+    console.error('❌ No article found.');
     process.exit(1);
   }
 
   const today = new Date().toISOString().split('T')[0];
-  console.log(`\n📅 Date: ${today}`);
+  console.log(`📅 Date: ${today}`);
   console.log(`📌 Article: "${article.title}"`);
 
-  // Check if already posted today
   const log = loadPostLog();
   if (log.find(p => p.date === today)) {
     console.log('✅ Already posted to LinkedIn today. Skipping.');
     return;
   }
 
-  // Generate teaser
-  console.log('\n🤖 Generating teaser via Gemini...');
+  console.log('\n🤖 Generating teaser...');
   const teaserText = await generateLinkedInTeaser(article);
-  console.log('✅ Teaser generated:\n');
+  console.log('✅ Teaser:\n');
   console.log(teaserText);
 
-  // Build article URL
   const articleUrl = `${BLOG_BASE_URL}/en/blog/${article.slug}`;
-
-  // Post to LinkedIn
   const result = await postToLinkedIn(teaserText, articleUrl);
 
-  // Log the post
-  log.unshift({
+  const logEntry = {
     date: today,
     articleSlug: article.slug,
     articleTitle: article.title,
@@ -196,19 +161,31 @@ async function main() {
     articleUrl,
     linkedinPostId: result.id || 'simulated',
     postedAt: new Date().toISOString(),
-  });
+  };
+
+  // ── Save to local JSON ──
+  log.unshift(logEntry);
   savePostLog(log);
 
+  // ── Save to Supabase: linkedin_posts table ──
+  await supabaseInsert('linkedin_posts', {
+    article_id: article.slug,
+    article_title: article.title,
+    post_text: teaserText,
+    article_url: articleUrl,
+    linkedin_post_id: result.id || null,
+    posted_at: new Date().toISOString(),
+  });
+
   if (result.simulated) {
-    console.log('\n⚠️  Simulated (no LinkedIn credentials). Set LINKEDIN_ACCESS_TOKEN and LINKEDIN_PERSON_URN.');
+    console.log('\n⚠️  Simulated (no LinkedIn credentials).');
   } else {
-    console.log(`\n🎉 Successfully posted to LinkedIn!`);
-    console.log(`🆔 Post ID: ${result.id}`);
+    console.log(`\n🎉 Posted to LinkedIn! ID: ${result.id}`);
   }
-  console.log(`🔗 Blog URL: ${articleUrl}`);
+  console.log(`🔗 ${articleUrl}`);
 }
 
 main().catch(err => {
-  console.error('❌ Fatal error:', err.message);
+  console.error('❌ Fatal:', err.message);
   process.exit(1);
 });

@@ -1,83 +1,88 @@
-# Supabase — Run this SQL in SQL Editor
-
-## Go to: supabase.com → Your Project → SQL Editor → New Query → Paste → Run
+# Supabase — 3 Tables Setup
+# Go to: supabase.com → Your Project → SQL Editor → New Query → Paste all → Run
 
 ```sql
--- ── 1. Comments table ──────────────────────────────────────────
-drop table if exists commentlog;
-drop table if exists comments;
+-- ══════════════════════════════════════════════
+-- TABLE 1: articles — stores all blog articles
+-- ══════════════════════════════════════════════
+create table if not exists articles (
+  id                text        primary key,
+  slug              text        not null unique,
+  title             text        not null,
+  date              date        not null,
+  category          text        not null,
+  category_name     text,
+  summary           text,
+  content           text,
+  real_world_example text,
+  key_points        jsonb       default '[]',
+  tags              jsonb       default '[]',
+  quiz              jsonb       default '[]',
+  created_at        timestamptz default now()
+);
 
-create table comments (
+create index if not exists idx_articles_date     on articles(date desc);
+create index if not exists idx_articles_category on articles(category);
+
+alter table articles enable row level security;
+create policy "Public read articles"   on articles for select using (true);
+create policy "Service insert articles" on articles for insert with check (true);
+
+-- ══════════════════════════════════════════════
+-- TABLE 2: article_images — stores image data
+-- ══════════════════════════════════════════════
+create table if not exists article_images (
+  id          uuid        default gen_random_uuid() primary key,
+  article_id  text        not null references articles(id) on delete cascade,
+  image_url   text        not null,
+  image_query text,
+  source      text        default 'unsplash',
+  created_at  timestamptz default now()
+);
+
+create index if not exists idx_images_article_id on article_images(article_id);
+
+alter table article_images enable row level security;
+create policy "Public read images"    on article_images for select using (true);
+create policy "Service insert images" on article_images for insert with check (true);
+
+-- ══════════════════════════════════════════════
+-- TABLE 3: linkedin_posts — stores LinkedIn post logs
+-- ══════════════════════════════════════════════
+create table if not exists linkedin_posts (
+  id               uuid        default gen_random_uuid() primary key,
+  article_id       text        not null,
+  article_title    text,
+  post_text        text        not null,
+  article_url      text,
+  linkedin_post_id text,
+  posted_at        timestamptz default now()
+);
+
+create index if not exists idx_linkedin_article_id on linkedin_posts(article_id);
+create index if not exists idx_linkedin_posted_at  on linkedin_posts(posted_at desc);
+
+alter table linkedin_posts enable row level security;
+create policy "Public read linkedin_posts"    on linkedin_posts for select using (true);
+create policy "Service insert linkedin_posts" on linkedin_posts for insert with check (true);
+
+-- ══════════════════════════════════════════════
+-- TABLE 4: comments (already exists — keeping it)
+-- ══════════════════════════════════════════════
+create table if not exists comments (
   id          uuid        default gen_random_uuid() primary key,
   article_id  text        not null,
   name        text        not null,
   comment     text        not null,
-  created_at  timestamptz default now() not null,
+  created_at  timestamptz default now(),
   updated_at  timestamptz
 );
 
-create index idx_comments_article_id on comments(article_id);
+create index if not exists idx_comments_article_id on comments(article_id);
 
--- ── 2. CommentLog table — tracks every edit & delete ───────────
-create table commentlog (
-  id          uuid        default gen_random_uuid() primary key,
-  comment_id  uuid        not null,
-  article_id  text        not null,
-  user_name   text        not null,
-  action      text        not null check (action in ('edit', 'delete')),
-  old_content text        not null,
-  new_content text,
-  edited_at   timestamptz default now() not null
-);
-
-create index idx_commentlog_comment_id on commentlog(comment_id);
-create index idx_commentlog_article_id on commentlog(article_id);
-
--- ── 3. Row Level Security ──────────────────────────────────────
-alter table comments    enable row level security;
-alter table commentlog  enable row level security;
-
--- Comments policies
-create policy "Anyone can read comments"
-  on comments for select using (true);
-
-create policy "Anyone can post comments"
-  on comments for insert with check (true);
-
-create policy "Anyone can edit comments"
-  on comments for update using (true);
-
-create policy "Anyone can delete comments"
-  on comments for delete using (true);
-
--- CommentLog policies
-create policy "Anyone can read commentlog"
-  on commentlog for select using (true);
-
-create policy "Anyone can insert commentlog"
-  on commentlog for insert with check (true);
+alter table comments enable row level security;
+create policy "Public read comments"   on comments for select using (true);
+create policy "Public insert comments" on comments for insert with check (true);
+create policy "Public update comments" on comments for update using (true);
+create policy "Public delete comments" on comments for delete using (true);
 ```
-
-## What each table does:
-
-### `comments` table
-| Column | Description |
-|---|---|
-| id | Unique comment ID |
-| article_id | Which article this comment belongs to |
-| name | Commenter's name |
-| comment | Comment text |
-| created_at | When posted |
-| updated_at | When last edited (null if never edited) |
-
-### `commentlog` table — audit trail
-| Column | Description |
-|---|---|
-| id | Log entry ID |
-| comment_id | Which comment was changed |
-| article_id | Which article |
-| user_name | Who made the change |
-| action | "edit" or "delete" |
-| old_content | Content BEFORE the change |
-| new_content | Content AFTER edit (null for delete) |
-| edited_at | Exact timestamp of change |

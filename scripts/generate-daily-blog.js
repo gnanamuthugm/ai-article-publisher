@@ -3,10 +3,42 @@ const path = require('path');
 const { GoogleGenAI } = require('@google/genai');
 require('dotenv').config({ path: '.env.local' });
 
-// TEST_MODE = true  → every run = new article (for testing)
-// TEST_MODE = false → once per day only (for production)
+// TEST_MODE = true  → every run = new article (5 min test)
+// TEST_MODE = false → once per day (production)
 const TEST_MODE = true;
 
+// ── Supabase config ──────────────────────────────────────────
+const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL;
+const SUPABASE_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+
+async function supabaseInsert(table, record) {
+  if (!SUPABASE_URL || !SUPABASE_KEY) {
+    console.log(`⚠️  Supabase not configured — skipping ${table} insert`);
+    return;
+  }
+  try {
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/${table}`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'apikey': SUPABASE_KEY,
+        'Authorization': `Bearer ${SUPABASE_KEY}`,
+        'Prefer': 'return=minimal',
+      },
+      body: JSON.stringify(record),
+    });
+    if (res.ok) {
+      console.log(`✅ Supabase [${table}] saved`);
+    } else {
+      const err = await res.text();
+      console.warn(`⚠️  Supabase [${table}] error: ${err}`);
+    }
+  } catch (e) {
+    console.warn(`⚠️  Supabase [${table}] failed:`, e.message);
+  }
+}
+
+// ── Categories ───────────────────────────────────────────────
 const CATEGORY_SCHEDULE = [
   { id: 'dialogflow-cx', name: 'Dialogflow CX', emoji: '🤖', color: 'blue', imageQuery: 'conversational AI chatbot interface', startMonth: '2026-04' },
   { id: 'conversational-agents-playbook', name: 'Conversational Agents Playbook', emoji: '📖', color: 'purple', imageQuery: 'AI assistant customer service agent', startMonth: '2026-05' },
@@ -178,7 +210,7 @@ async function fetchUnsplashImage(topicQuery, fallbackQuery) {
         console.log(`🖼️  Image query: "${q}"`);
         return pick.urls.regular;
       }
-    } catch (e) { console.warn(`⚠️ Unsplash error:`, e.message); }
+    } catch (e) { console.warn(`⚠️ Unsplash:`, e.message); }
   }
   return fallback;
 }
@@ -192,7 +224,7 @@ async function generateArticleWithRetry(topic, category, maxRetries = 4) {
 
   const prompt = `You are a world-class ${category.name} expert. Teach someone with ZERO knowledge about: "${topic}"
 
-Return ONLY valid JSON (no markdown, no backticks, no extra text):
+Return ONLY valid JSON (no markdown, no backticks):
 {
   "title": "Engaging specific article title",
   "summary": "One sentence: what the reader will learn",
@@ -207,11 +239,16 @@ Return ONLY valid JSON (no markdown, no backticks, no extra text):
   "tags": ["${category.id}", "contact-center", "ai"]
 }`;
 
+  // Updated model names — gemini-1.5-flash was renamed
+  const MODELS = ['gemini-2.0-flash', 'gemini-2.0-flash-lite', 'gemini-1.5-flash-latest'];
+
   for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    const model = MODELS[Math.min(attempt - 1, MODELS.length - 1)];
     try {
-      console.log(`🤖 Generating (attempt ${attempt}/${maxRetries}): "${topic}"`);
-      const response = await client.models.generateContent({ model: 'gemini-1.5-flash', contents: prompt });
-      let text = response.text.trim().replace(/^```json\s*/i, '').replace(/^```\s*/i, '').replace(/```\s*$/i, '').trim();
+      console.log(`🤖 Attempt ${attempt}/${maxRetries} using model: ${model}`);
+      const response = await client.models.generateContent({ model, contents: prompt });
+      let text = response.text.trim()
+        .replace(/^```json\s*/i, '').replace(/^```\s*/i, '').replace(/```\s*$/i, '').trim();
       try { return JSON.parse(text); }
       catch (e) {
         const match = text.match(/\{[\s\S]*\}/);
@@ -219,10 +256,11 @@ Return ONLY valid JSON (no markdown, no backticks, no extra text):
         throw new Error(`JSON parse failed: ${e.message}`);
       }
     } catch (err) {
-      const is503 = (err.message || '').match(/503|UNAVAILABLE|overloaded|high demand/i);
-      if (is503 && attempt < maxRetries) {
-        const wait = attempt * 20;
-        console.log(`⚠️  Gemini busy. Waiting ${wait}s...`);
+      const msg = err.message || '';
+      const isRetryable = msg.match(/503|UNAVAILABLE|overloaded|high demand|429|quota/i);
+      if (isRetryable && attempt < maxRetries) {
+        const wait = attempt * 15;
+        console.log(`⚠️  Retrying in ${wait}s... (${msg.substring(0, 80)})`);
         await sleep(wait * 1000);
         continue;
       }
@@ -245,15 +283,14 @@ function saveArticles(articles) {
 }
 
 async function main() {
-  console.log(`\n🚀 CCAIP Blog Generator [${TEST_MODE ? 'TEST MODE' : 'PRODUCTION'}]\n`);
+  console.log(`\n🚀 CCAIP Blog Generator [${TEST_MODE ? 'TEST MODE - every run' : 'PRODUCTION - once/day'}]\n`);
 
   const now = new Date();
   const today = now.toISOString().split('T')[0];
   const category = getCurrentCategory();
   const topic = getTodaysTopic(category.id);
 
-  // TEST: unique slug per run so every 5 mins = new article
-  // PRODUCTION: one slug per day
+  // TEST: unique slug per run | PRODUCTION: one per day
   const timeStr = now.toTimeString().slice(0, 5).replace(':', '');
   const slug = TEST_MODE
     ? `${today}-${createSlug(topic)}-${timeStr}`
@@ -265,7 +302,6 @@ async function main() {
 
   const articles = loadArticles();
 
-  // Production only: skip if already published today
   if (!TEST_MODE && articles.find(a => a.date === today)) {
     console.log('✅ Already published today. Skipping.');
     return;
@@ -274,7 +310,7 @@ async function main() {
   const data = await generateArticleWithRetry(topic, category);
   console.log(`✅ Generated: "${data.title}"`);
 
-  const image = await fetchUnsplashImage(data.imageQuery, category.imageQuery);
+  const imageUrl = await fetchUnsplashImage(data.imageQuery, category.imageQuery);
 
   const article = {
     id: slug, slug,
@@ -284,14 +320,42 @@ async function main() {
     summary: data.summary, content: data.content,
     realWorldExample: data.realWorldExample,
     keyPoints: data.keyPoints || [],
-    image,
+    image: imageUrl,
     tags: data.tags || [category.id],
     quiz: (data.quiz || []).slice(0, 2),
   };
 
+  // ── Save to JSON (for website) ──
   articles.unshift(article);
   saveArticles(articles);
 
+  // ── Save to Supabase: articles table ──
+  await supabaseInsert('articles', {
+    id: slug,
+    slug,
+    title: data.title,
+    date: today,
+    category: category.id,
+    category_name: category.name,
+    summary: data.summary,
+    content: data.content,
+    real_world_example: data.realWorldExample,
+    key_points: data.keyPoints || [],
+    tags: data.tags || [category.id],
+    quiz: (data.quiz || []).slice(0, 2),
+    created_at: now.toISOString(),
+  });
+
+  // ── Save to Supabase: images table ──
+  await supabaseInsert('article_images', {
+    article_id: slug,
+    image_url: imageUrl,
+    image_query: data.imageQuery || category.imageQuery,
+    source: 'unsplash',
+    created_at: now.toISOString(),
+  });
+
+  // ── Save markdown file ──
   const mdDir = path.join(process.cwd(), 'content', 'articles', 'en');
   if (!fs.existsSync(mdDir)) fs.mkdirSync(mdDir, { recursive: true });
   fs.writeFileSync(
