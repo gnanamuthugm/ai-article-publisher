@@ -1,0 +1,11 @@
+[
+  {
+    "date": "2026-04-12",
+    "articleSlug": "2026-04-12-testing-and-debugging-conversations-in-dialogflow-cx",
+    "articleTitle": "Unlocking Perfect Conversations: Your Guide to Testing & Debugging in Dialogflow CX",
+    "postText": "What if your Dialogflow CX bot isn't understanding users the way you *think* it is?\n\nI share actionable techniques for systematic NLU performance evaluation and uncovering elusive webhook integration errors *before* they impact live users.\n\nUnlock the full guide here 👇\n\n#DialogflowCX #ConversationalAI #ContactCenterAI #AI",
+    "articleUrl": "https://ai-article-publisher.vercel.app//en/blog/2026-04-12-testing-and-debugging-conversations-in-dialogflow-cx",
+    "linkedinPostId": "urn:li:share:7449027897400483840",
+    "postedAt": "2026-04-12T09:37:27.156Z"
+  }
+]
