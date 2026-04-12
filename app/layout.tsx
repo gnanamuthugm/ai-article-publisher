@@ -16,7 +16,8 @@ const geistMono = Geist_Mono({
 
 export const metadata: Metadata = {
   title: "CCAIP Daily - One Concept a Day",
-  description: "Master CCAIP one concept at a time. Daily articles with real-world examples, key points and quizzes.",
+  description:
+    "Master CCAIP one concept at a time. Daily articles with real-world examples, key points and quizzes.",
 };
 
 export default function RootLayout({
@@ -26,7 +27,9 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en">
-      <body className={`${geistSans.variable} ${geistMono.variable} antialiased`}>
+      <body
+        className={`${geistSans.variable} ${geistMono.variable} antialiased`}
+      >
         {children}
         <Analytics />
         <SpeedInsights />
