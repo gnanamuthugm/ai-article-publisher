@@ -1,12 +1,9 @@
 name: Daily CCAIP Blog Publisher
 
 on:
-  push:
-    branches:
-      - main                # code push ஆனா உடனே run ஆகும்
   schedule:
-    - cron: '0 6 * * *'   # 11:30 AM IST every day automatic
-  workflow_dispatch:        # Manual trigger anytime
+    - cron: '0 6 * * *'   # 11:30 AM IST every day (UTC 6:00 = IST 11:30)
+  workflow_dispatch:        # Manual trigger only when needed
 
 jobs:
   publish:

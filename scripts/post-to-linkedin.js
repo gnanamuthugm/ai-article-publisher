@@ -28,7 +28,7 @@ async function supabaseInsert(table, record) {
     if (res.ok) console.log(`✅ Supabase [${table}] saved`);
     else console.warn(`⚠️  Supabase [${table}]:`, await res.text());
   } catch (e) {
-    console.warn(`⚠️  Supabase [${table}] failed:`, e.message);
+    console.warn(`⚠️  Supabase [${table}]:`, e.message);
   }
 }
 
@@ -37,35 +37,32 @@ async function generateLinkedInTeaser(article) {
   if (!apiKey) throw new Error('GEMINI_API_KEY missing');
   const client = new GoogleGenAI({ apiKey });
 
-  const prompt = `You are a LinkedIn content expert. Write a LinkedIn post for this article:
-
+  const prompt = `Write a LinkedIn post for this article:
 Title: "${article.title}"
 Summary: "${article.summary}"
-Category: ${article.categoryName}
 
-STRICT RULES:
-- 3 to 5 lines of engaging text only
-- Line 1: Powerful hook (surprising fact, bold question, or contrarian statement)
-- Lines 2-3: 1-2 specific insights or key takeaways
+RULES:
+- 3 to 5 lines total
+- Line 1: Powerful hook (surprising fact or bold question)
+- Lines 2-3: 1-2 specific insights from the topic
 - Last line: Call-to-action like "Read today's article 👇"
-- New line with 3-4 relevant hashtags
-- Max 2 emojis in main text
-- NO signatures, NO "— Name", NO portfolio links
-- Professional conversational tone
+- End with 3-4 hashtags on a new line
+- Max 2 emojis
+- NO signatures, NO portfolio links, NO "— Name"
 
-Return ONLY the post text. Nothing else.`;
+Return ONLY the post text.`;
 
-  // Try multiple models
-  const models = ['gemini-2.0-flash', 'gemini-2.0-flash-lite', 'gemini-1.5-flash-latest'];
-  for (const model of models) {
+  // ✅ Correct model names
+  const MODELS = ['gemini-2.0-flash', 'gemini-2.0-flash-lite', 'gemini-2.5-flash'];
+  for (const model of MODELS) {
     try {
       const response = await client.models.generateContent({ model, contents: prompt });
       return response.text.trim();
     } catch (e) {
-      console.warn(`⚠️  Model ${model} failed:`, e.message.substring(0, 60));
+      console.warn(`⚠️  ${model} failed:`, e.message.substring(0, 80));
     }
   }
-  throw new Error('All Gemini models failed for LinkedIn teaser');
+  throw new Error('All Gemini models failed');
 }
 
 function getTodaysArticle() {
@@ -88,29 +85,14 @@ function savePostLog(log) {
 
 async function postToLinkedIn(teaserText, articleUrl) {
   if (!LINKEDIN_ACCESS_TOKEN || !LINKEDIN_PERSON_URN) {
-    console.log('\n⚠️  No LinkedIn credentials — simulated post:\n');
-    console.log('─'.repeat(60));
+    console.log('\n⚠️  No LinkedIn credentials — simulated:\n');
     console.log(teaserText);
-    console.log(`\n🔗 Read more: ${articleUrl}`);
-    console.log('─'.repeat(60));
+    console.log(`\n🔗 ${articleUrl}`);
     return { simulated: true };
   }
 
   const fullText = `${teaserText}\n\n🔗 Read more: ${articleUrl}`;
 
-  const postBody = {
-    author: LINKEDIN_PERSON_URN,
-    lifecycleState: 'PUBLISHED',
-    specificContent: {
-      'com.linkedin.ugc.ShareContent': {
-        shareCommentary: { text: fullText },
-        shareMediaCategory: 'NONE',
-      },
-    },
-    visibility: { 'com.linkedin.ugc.MemberNetworkVisibility': 'PUBLIC' },
-  };
-
-  console.log('\n📤 Posting to LinkedIn...');
   const res = await fetch('https://api.linkedin.com/v2/ugcPosts', {
     method: 'POST',
     headers: {
@@ -118,37 +100,41 @@ async function postToLinkedIn(teaserText, articleUrl) {
       'Content-Type': 'application/json',
       'X-Restli-Protocol-Version': '2.0.0',
     },
-    body: JSON.stringify(postBody),
+    body: JSON.stringify({
+      author: LINKEDIN_PERSON_URN,
+      lifecycleState: 'PUBLISHED',
+      specificContent: {
+        'com.linkedin.ugc.ShareContent': {
+          shareCommentary: { text: fullText },
+          shareMediaCategory: 'NONE',
+        },
+      },
+      visibility: { 'com.linkedin.ugc.MemberNetworkVisibility': 'PUBLIC' },
+    }),
   });
 
   const responseText = await res.text();
-  if (!res.ok) throw new Error(`LinkedIn API ${res.status}: ${responseText}`);
+  if (!res.ok) throw new Error(`LinkedIn ${res.status}: ${responseText}`);
   return JSON.parse(responseText);
 }
 
 async function main() {
-  console.log('\n📣 LinkedIn Auto-Post v2.2\n');
+  console.log('\n📣 LinkedIn Auto-Post\n');
 
   const article = getTodaysArticle();
-  if (!article) {
-    console.error('❌ No article found.');
-    process.exit(1);
-  }
+  if (!article) { console.error('❌ No article found.'); process.exit(1); }
 
   const today = new Date().toISOString().split('T')[0];
-  console.log(`📅 Date: ${today}`);
-  console.log(`📌 Article: "${article.title}"`);
+  console.log(`📅 ${today} | 📌 "${article.title}"`);
 
   const log = loadPostLog();
   if (log.find(p => p.date === today)) {
-    console.log('✅ Already posted to LinkedIn today. Skipping.');
+    console.log('✅ Already posted today. Skipping.');
     return;
   }
 
-  console.log('\n🤖 Generating teaser...');
   const teaserText = await generateLinkedInTeaser(article);
-  console.log('✅ Teaser:\n');
-  console.log(teaserText);
+  console.log('\n✅ Teaser:\n' + teaserText);
 
   const articleUrl = `${BLOG_BASE_URL}/en/blog/${article.slug}`;
   const result = await postToLinkedIn(teaserText, articleUrl);
@@ -163,11 +149,9 @@ async function main() {
     postedAt: new Date().toISOString(),
   };
 
-  // ── Save to local JSON ──
   log.unshift(logEntry);
   savePostLog(log);
 
-  // ── Save to Supabase: linkedin_posts table ──
   await supabaseInsert('linkedin_posts', {
     article_id: article.slug,
     article_title: article.title,
@@ -178,11 +162,10 @@ async function main() {
   });
 
   if (result.simulated) {
-    console.log('\n⚠️  Simulated (no LinkedIn credentials).');
+    console.log('\n⚠️  Simulated post.');
   } else {
-    console.log(`\n🎉 Posted to LinkedIn! ID: ${result.id}`);
+    console.log(`\n🎉 Posted! ID: ${result.id}`);
   }
-  console.log(`🔗 ${articleUrl}`);
 }
 
 main().catch(err => {

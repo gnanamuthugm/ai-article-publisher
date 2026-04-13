@@ -3,8 +3,7 @@ const path = require('path');
 const { GoogleGenAI } = require('@google/genai');
 require('dotenv').config({ path: '.env.local' });
 
-// TEST_MODE = false → once per day at 11:30 AM IST (PRODUCTION)
-const TEST_MODE = false;
+const TEST_MODE = false; // false = once per day (production)
 
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const SUPABASE_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
@@ -53,7 +52,7 @@ const TOPICS = {
     "Forms and Slot Filling in Dialogflow CX",
     "System Functions and Prebuilt Components",
     "Testing and Debugging Conversations in Dialogflow CX",
-    "Publishing and Environment Management",
+    "Publishing and Environment Management in Dialogflow CX",
     "Dialogflow CX Integration with Google Cloud",
     "Voice Bot Setup with Dialogflow CX and Telephony",
     "Multi-language Support in Dialogflow CX",
@@ -210,10 +209,13 @@ async function fetchUnsplashImage(topicQuery, fallbackQuery) {
 
 function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
 
-async function generateArticleWithRetry(topic, category, maxRetries = 4) {
+async function generateArticleWithRetry(topic, category, maxRetries = 3) {
   const apiKey = process.env.GEMINI_API_KEY;
   if (!apiKey || apiKey.startsWith('your-')) throw new Error('GEMINI_API_KEY missing');
   const client = new GoogleGenAI({ apiKey });
+
+  // ✅ CORRECT model names as of 2026
+  const MODELS = ['gemini-2.0-flash', 'gemini-2.0-flash-lite', 'gemini-2.5-flash'];
 
   const prompt = `You are a world-class ${category.name} expert. Teach someone with ZERO knowledge about: "${topic}"
 
@@ -232,12 +234,10 @@ Return ONLY valid JSON (no markdown, no backticks):
   "tags": ["${category.id}", "contact-center", "ai"]
 }`;
 
-  const MODELS = ['gemini-2.0-flash', 'gemini-2.0-flash-lite', 'gemini-1.5-flash-latest'];
-
   for (let attempt = 1; attempt <= maxRetries; attempt++) {
-    const model = MODELS[Math.min(attempt - 1, MODELS.length - 1)];
+    const model = MODELS[attempt - 1];
     try {
-      console.log(`🤖 Attempt ${attempt}/${maxRetries} [${model}]: "${topic}"`);
+      console.log(`🤖 Attempt ${attempt}/${maxRetries} [${model}]`);
       const response = await client.models.generateContent({ model, contents: prompt });
       let text = response.text.trim()
         .replace(/^```json\s*/i, '').replace(/^```\s*/i, '').replace(/```\s*$/i, '').trim();
@@ -248,14 +248,17 @@ Return ONLY valid JSON (no markdown, no backticks):
         throw new Error(`JSON parse failed: ${e.message}`);
       }
     } catch (err) {
-      const isRetryable = (err.message || '').match(/503|UNAVAILABLE|overloaded|high demand|429|quota/i);
-      if (isRetryable && attempt < maxRetries) {
-        const wait = attempt * 15;
-        console.log(`⚠️  Retrying in ${wait}s...`);
-        await sleep(wait * 1000);
+      const msg = err.message || '';
+      const isRetryable = msg.match(/503|UNAVAILABLE|overloaded|high demand|429|quota/i);
+      console.warn(`⚠️  Model ${model} failed: ${msg.substring(0, 100)}`);
+      if (attempt < maxRetries) {
+        if (isRetryable) {
+          console.log(`⏳ Waiting 15s before next attempt...`);
+          await sleep(15000);
+        }
         continue;
       }
-      throw err;
+      throw new Error(`All ${maxRetries} models failed. Last error: ${msg}`);
     }
   }
 }
@@ -274,7 +277,7 @@ function saveArticles(articles) {
 }
 
 async function main() {
-  console.log(`\n🚀 CCAIP Blog Generator [PRODUCTION — once per day]\n`);
+  console.log(`\n🚀 CCAIP Blog Generator [PRODUCTION]\n`);
 
   const now = new Date();
   const today = now.toISOString().split('T')[0];
@@ -288,7 +291,6 @@ async function main() {
 
   const articles = loadArticles();
 
-  // Skip if already published today
   if (articles.find(a => a.date === today)) {
     console.log('✅ Already published today. Skipping.');
     return;
@@ -316,8 +318,7 @@ async function main() {
   saveArticles(articles);
 
   await supabaseInsert('articles', {
-    id: slug, slug,
-    title: data.title, date: today,
+    id: slug, slug, title: data.title, date: today,
     category: category.id, category_name: category.name,
     summary: data.summary, content: data.content,
     real_world_example: data.realWorldExample,
