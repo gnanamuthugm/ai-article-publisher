@@ -3,17 +3,15 @@ const path = require('path');
 const { GoogleGenAI } = require('@google/genai');
 require('dotenv').config({ path: '.env.local' });
 
-// TEST_MODE = true  → every run = new article (5 min test)
-// TEST_MODE = false → once per day (production)
-const TEST_MODE = true;
+// TEST_MODE = false → once per day at 11:30 AM IST (PRODUCTION)
+const TEST_MODE = false;
 
-// ── Supabase config ──────────────────────────────────────────
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const SUPABASE_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
 async function supabaseInsert(table, record) {
   if (!SUPABASE_URL || !SUPABASE_KEY) {
-    console.log(`⚠️  Supabase not configured — skipping ${table} insert`);
+    console.log(`⚠️  Supabase not configured — skipping ${table}`);
     return;
   }
   try {
@@ -27,18 +25,13 @@ async function supabaseInsert(table, record) {
       },
       body: JSON.stringify(record),
     });
-    if (res.ok) {
-      console.log(`✅ Supabase [${table}] saved`);
-    } else {
-      const err = await res.text();
-      console.warn(`⚠️  Supabase [${table}] error: ${err}`);
-    }
+    if (res.ok) console.log(`✅ Supabase [${table}] saved`);
+    else console.warn(`⚠️  Supabase [${table}]:`, await res.text());
   } catch (e) {
-    console.warn(`⚠️  Supabase [${table}] failed:`, e.message);
+    console.warn(`⚠️  Supabase [${table}]:`, e.message);
   }
 }
 
-// ── Categories ───────────────────────────────────────────────
 const CATEGORY_SCHEDULE = [
   { id: 'dialogflow-cx', name: 'Dialogflow CX', emoji: '🤖', color: 'blue', imageQuery: 'conversational AI chatbot interface', startMonth: '2026-04' },
   { id: 'conversational-agents-playbook', name: 'Conversational Agents Playbook', emoji: '📖', color: 'purple', imageQuery: 'AI assistant customer service agent', startMonth: '2026-05' },
@@ -239,13 +232,12 @@ Return ONLY valid JSON (no markdown, no backticks):
   "tags": ["${category.id}", "contact-center", "ai"]
 }`;
 
-  // Updated model names — gemini-1.5-flash was renamed
   const MODELS = ['gemini-2.0-flash', 'gemini-2.0-flash-lite', 'gemini-1.5-flash-latest'];
 
   for (let attempt = 1; attempt <= maxRetries; attempt++) {
     const model = MODELS[Math.min(attempt - 1, MODELS.length - 1)];
     try {
-      console.log(`🤖 Attempt ${attempt}/${maxRetries} using model: ${model}`);
+      console.log(`🤖 Attempt ${attempt}/${maxRetries} [${model}]: "${topic}"`);
       const response = await client.models.generateContent({ model, contents: prompt });
       let text = response.text.trim()
         .replace(/^```json\s*/i, '').replace(/^```\s*/i, '').replace(/```\s*$/i, '').trim();
@@ -256,11 +248,10 @@ Return ONLY valid JSON (no markdown, no backticks):
         throw new Error(`JSON parse failed: ${e.message}`);
       }
     } catch (err) {
-      const msg = err.message || '';
-      const isRetryable = msg.match(/503|UNAVAILABLE|overloaded|high demand|429|quota/i);
+      const isRetryable = (err.message || '').match(/503|UNAVAILABLE|overloaded|high demand|429|quota/i);
       if (isRetryable && attempt < maxRetries) {
         const wait = attempt * 15;
-        console.log(`⚠️  Retrying in ${wait}s... (${msg.substring(0, 80)})`);
+        console.log(`⚠️  Retrying in ${wait}s...`);
         await sleep(wait * 1000);
         continue;
       }
@@ -283,18 +274,13 @@ function saveArticles(articles) {
 }
 
 async function main() {
-  console.log(`\n🚀 CCAIP Blog Generator [${TEST_MODE ? 'TEST MODE - every run' : 'PRODUCTION - once/day'}]\n`);
+  console.log(`\n🚀 CCAIP Blog Generator [PRODUCTION — once per day]\n`);
 
   const now = new Date();
   const today = now.toISOString().split('T')[0];
   const category = getCurrentCategory();
   const topic = getTodaysTopic(category.id);
-
-  // TEST: unique slug per run | PRODUCTION: one per day
-  const timeStr = now.toTimeString().slice(0, 5).replace(':', '');
-  const slug = TEST_MODE
-    ? `${today}-${createSlug(topic)}-${timeStr}`
-    : `${today}-${createSlug(topic)}`;
+  const slug = `${today}-${createSlug(topic)}`;
 
   console.log(`📅 Date     : ${today}`);
   console.log(`📂 Category : ${category.name}`);
@@ -302,7 +288,8 @@ async function main() {
 
   const articles = loadArticles();
 
-  if (!TEST_MODE && articles.find(a => a.date === today)) {
+  // Skip if already published today
+  if (articles.find(a => a.date === today)) {
     console.log('✅ Already published today. Skipping.');
     return;
   }
@@ -325,20 +312,14 @@ async function main() {
     quiz: (data.quiz || []).slice(0, 2),
   };
 
-  // ── Save to JSON (for website) ──
   articles.unshift(article);
   saveArticles(articles);
 
-  // ── Save to Supabase: articles table ──
   await supabaseInsert('articles', {
-    id: slug,
-    slug,
-    title: data.title,
-    date: today,
-    category: category.id,
-    category_name: category.name,
-    summary: data.summary,
-    content: data.content,
+    id: slug, slug,
+    title: data.title, date: today,
+    category: category.id, category_name: category.name,
+    summary: data.summary, content: data.content,
     real_world_example: data.realWorldExample,
     key_points: data.keyPoints || [],
     tags: data.tags || [category.id],
@@ -346,7 +327,6 @@ async function main() {
     created_at: now.toISOString(),
   });
 
-  // ── Save to Supabase: images table ──
   await supabaseInsert('article_images', {
     article_id: slug,
     image_url: imageUrl,
@@ -355,7 +335,6 @@ async function main() {
     created_at: now.toISOString(),
   });
 
-  // ── Save markdown file ──
   const mdDir = path.join(process.cwd(), 'content', 'articles', 'en');
   if (!fs.existsSync(mdDir)) fs.mkdirSync(mdDir, { recursive: true });
   fs.writeFileSync(
