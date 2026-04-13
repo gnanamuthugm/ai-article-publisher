@@ -3,7 +3,14 @@ const path = require('path');
 const { GoogleGenAI } = require('@google/genai');
 require('dotenv').config({ path: '.env.local' });
 
-const TEST_MODE = false; // false = once per day (production)
+// ============================================================
+// CCAIP Daily Blog Generator — Production
+// Model  : gemini-2.5-flash only (free tier: 20 req/day, 5 RPM)
+// Retry  : max 2 attempts, 65s wait between them
+// Safety : if both attempts fail → log and skip gracefully
+// ============================================================
+
+const MODEL = 'gemini-2.5-flash';
 
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const SUPABASE_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
@@ -31,6 +38,7 @@ async function supabaseInsert(table, record) {
   }
 }
 
+// ── Categories ───────────────────────────────────────────────
 const CATEGORY_SCHEDULE = [
   { id: 'dialogflow-cx', name: 'Dialogflow CX', emoji: '🤖', color: 'blue', imageQuery: 'conversational AI chatbot interface', startMonth: '2026-04' },
   { id: 'conversational-agents-playbook', name: 'Conversational Agents Playbook', emoji: '📖', color: 'purple', imageQuery: 'AI assistant customer service agent', startMonth: '2026-05' },
@@ -207,15 +215,11 @@ async function fetchUnsplashImage(topicQuery, fallbackQuery) {
   return fallback;
 }
 
-function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
-
-async function generateArticleWithRetry(topic, category, maxRetries = 3) {
+// ── Gemini API — max 2 attempts, 65s wait, safe for 5 RPM ───
+async function generateArticle(topic, category) {
   const apiKey = process.env.GEMINI_API_KEY;
   if (!apiKey || apiKey.startsWith('your-')) throw new Error('GEMINI_API_KEY missing');
   const client = new GoogleGenAI({ apiKey });
-
-  // ✅ CORRECT model names as of 2026
-  const MODELS = ['gemini-2.0-flash', 'gemini-2.0-flash-lite', 'gemini-2.5-flash'];
 
   const prompt = `You are a world-class ${category.name} expert. Teach someone with ZERO knowledge about: "${topic}"
 
@@ -223,8 +227,8 @@ Return ONLY valid JSON (no markdown, no backticks):
 {
   "title": "Engaging specific article title",
   "summary": "One sentence: what the reader will learn",
-  "imageQuery": "3-4 words for Unsplash image that visually represents THIS specific topic",
-  "content": "Full article HTML with <h2><h3><p><ul><li><strong>. Min 700 words. Include: intro, 2-3 core concepts with real examples, real-world company example with numbers, key takeaways.",
+  "imageQuery": "3-4 words for Unsplash that visually represents THIS specific topic",
+  "content": "Full article HTML with <h2><h3><p><ul><li><strong>. Min 700 words. Intro, 2-3 core concepts with real examples, real-world company example with numbers, key takeaways.",
   "realWorldExample": "2-3 sentences: real company + what they did + measurable results",
   "keyPoints": ["Takeaway 1","Takeaway 2","Takeaway 3","Takeaway 4","Takeaway 5"],
   "quiz": [
@@ -234,11 +238,10 @@ Return ONLY valid JSON (no markdown, no backticks):
   "tags": ["${category.id}", "contact-center", "ai"]
 }`;
 
-  for (let attempt = 1; attempt <= maxRetries; attempt++) {
-    const model = MODELS[attempt - 1];
+  for (let attempt = 1; attempt <= 2; attempt++) {
     try {
-      console.log(`🤖 Attempt ${attempt}/${maxRetries} [${model}]`);
-      const response = await client.models.generateContent({ model, contents: prompt });
+      console.log(`Attempt ${attempt}/2`);
+      const response = await client.models.generateContent({ model: MODEL, contents: prompt });
       let text = response.text.trim()
         .replace(/^```json\s*/i, '').replace(/^```\s*/i, '').replace(/```\s*$/i, '').trim();
       try { return JSON.parse(text); }
@@ -249,16 +252,15 @@ Return ONLY valid JSON (no markdown, no backticks):
       }
     } catch (err) {
       const msg = err.message || '';
-      const isRetryable = msg.match(/503|UNAVAILABLE|overloaded|high demand|429|quota/i);
-      console.warn(`⚠️  Model ${model} failed: ${msg.substring(0, 100)}`);
-      if (attempt < maxRetries) {
-        if (isRetryable) {
-          console.log(`⏳ Waiting 15s before next attempt...`);
-          await sleep(15000);
-        }
+      const code = err.code || (msg.match(/"code":(\d+)/) || [])[1];
+      const is429or503 = msg.includes('429') || msg.includes('503') || code === 429 || code === 503;
+
+      if (attempt === 1 && is429or503) {
+        console.log(`Waiting 65 seconds before retry...`);
+        await new Promise(r => setTimeout(r, 65000));
         continue;
       }
-      throw new Error(`All ${maxRetries} models failed. Last error: ${msg}`);
+      throw err;
     }
   }
 }
@@ -277,7 +279,7 @@ function saveArticles(articles) {
 }
 
 async function main() {
-  console.log(`\n🚀 CCAIP Blog Generator [PRODUCTION]\n`);
+  console.log(`\n🚀 CCAIP Blog Generator [PRODUCTION — once per day]\n`);
 
   const now = new Date();
   const today = now.toISOString().split('T')[0];
@@ -288,6 +290,7 @@ async function main() {
   console.log(`📅 Date     : ${today}`);
   console.log(`📂 Category : ${category.name}`);
   console.log(`📌 Topic    : "${topic}"`);
+  console.log(`🤖 Model    : ${MODEL}`);
 
   const articles = loadArticles();
 
@@ -296,8 +299,16 @@ async function main() {
     return;
   }
 
-  const data = await generateArticleWithRetry(topic, category);
-  console.log(`✅ Generated: "${data.title}"`);
+  // Generate article — graceful failure if API unavailable
+  let data;
+  try {
+    data = await generateArticle(topic, category);
+    console.log(`✅ Article generated: "${data.title}"`);
+  } catch (err) {
+    console.log(`⚠️  Gemini API failed after 2 attempts: ${err.message.substring(0, 120)}`);
+    console.log(`⏭️  Skipping article generation for today. Will retry tomorrow at 11:30 AM IST.`);
+    return; // Exit gracefully — no process.exit(1)
+  }
 
   const imageUrl = await fetchUnsplashImage(data.imageQuery, category.imageQuery);
 
@@ -348,7 +359,9 @@ async function main() {
   console.log(`🔗 /en/blog/${slug}\n`);
 }
 
+// Graceful exit — never crash the workflow
 main().catch(err => {
-  console.error('❌ Fatal:', err.message);
-  process.exit(1);
+  console.log(`⚠️  Unexpected error: ${err.message}`);
+  console.log(`⏭️  Workflow continuing safely.`);
+  process.exit(0); // exit 0 = success (no workflow failure)
 });

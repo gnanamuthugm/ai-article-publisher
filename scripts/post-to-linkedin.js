@@ -3,6 +3,8 @@ const path = require('path');
 const { GoogleGenAI } = require('@google/genai');
 require('dotenv').config({ path: '.env.local' });
 
+const MODEL = 'gemini-2.5-flash';
+
 const ARTICLES_PATH = path.join(process.cwd(), 'data', 'articles.json');
 const LINKEDIN_LOG_PATH = path.join(process.cwd(), 'data', 'linkedin-posts.json');
 
@@ -52,17 +54,22 @@ RULES:
 
 Return ONLY the post text.`;
 
-  // ✅ Correct model names
-  const MODELS = ['gemini-2.0-flash', 'gemini-2.0-flash-lite', 'gemini-2.5-flash'];
-  for (const model of MODELS) {
+  for (let attempt = 1; attempt <= 2; attempt++) {
     try {
-      const response = await client.models.generateContent({ model, contents: prompt });
+      console.log(`Attempt ${attempt}/2`);
+      const response = await client.models.generateContent({ model: MODEL, contents: prompt });
       return response.text.trim();
-    } catch (e) {
-      console.warn(`⚠️  ${model} failed:`, e.message.substring(0, 80));
+    } catch (err) {
+      const msg = err.message || '';
+      const is429or503 = msg.includes('429') || msg.includes('503');
+      if (attempt === 1 && is429or503) {
+        console.log(`Waiting 65 seconds before retry...`);
+        await new Promise(r => setTimeout(r, 65000));
+        continue;
+      }
+      throw err;
     }
   }
-  throw new Error('All Gemini models failed');
 }
 
 function getTodaysArticle() {
@@ -85,7 +92,7 @@ function savePostLog(log) {
 
 async function postToLinkedIn(teaserText, articleUrl) {
   if (!LINKEDIN_ACCESS_TOKEN || !LINKEDIN_PERSON_URN) {
-    console.log('\n⚠️  No LinkedIn credentials — simulated:\n');
+    console.log('\n⚠️  No LinkedIn credentials — simulated post:\n');
     console.log(teaserText);
     console.log(`\n🔗 ${articleUrl}`);
     return { simulated: true };
@@ -122,7 +129,10 @@ async function main() {
   console.log('\n📣 LinkedIn Auto-Post\n');
 
   const article = getTodaysArticle();
-  if (!article) { console.error('❌ No article found.'); process.exit(1); }
+  if (!article) {
+    console.log('⚠️  No article found — skipping LinkedIn post.');
+    return;
+  }
 
   const today = new Date().toISOString().split('T')[0];
   console.log(`📅 ${today} | 📌 "${article.title}"`);
@@ -133,11 +143,26 @@ async function main() {
     return;
   }
 
-  const teaserText = await generateLinkedInTeaser(article);
-  console.log('\n✅ Teaser:\n' + teaserText);
+  let teaserText;
+  try {
+    teaserText = await generateLinkedInTeaser(article);
+    console.log('\n✅ Teaser generated:\n' + teaserText);
+  } catch (err) {
+    console.log(`⚠️  Teaser generation failed: ${err.message.substring(0, 100)}`);
+    console.log('⏭️  Skipping LinkedIn post today.');
+    return;
+  }
 
   const articleUrl = `${BLOG_BASE_URL}/en/blog/${article.slug}`;
-  const result = await postToLinkedIn(teaserText, articleUrl);
+
+  let result;
+  try {
+    result = await postToLinkedIn(teaserText, articleUrl);
+  } catch (err) {
+    console.log(`⚠️  LinkedIn post failed: ${err.message.substring(0, 100)}`);
+    console.log('⏭️  Skipping LinkedIn post today.');
+    return;
+  }
 
   const logEntry = {
     date: today,
@@ -162,13 +187,15 @@ async function main() {
   });
 
   if (result.simulated) {
-    console.log('\n⚠️  Simulated post.');
+    console.log('\n⚠️  Simulated post (no LinkedIn credentials).');
   } else {
-    console.log(`\n🎉 Posted! ID: ${result.id}`);
+    console.log(`\n🎉 Posted to LinkedIn! ID: ${result.id}`);
   }
 }
 
+// Graceful exit — never crash the workflow
 main().catch(err => {
-  console.error('❌ Fatal:', err.message);
-  process.exit(1);
+  console.log(`⚠️  LinkedIn script error: ${err.message}`);
+  console.log('⏭️  Workflow continuing safely.');
+  process.exit(0);
 });
