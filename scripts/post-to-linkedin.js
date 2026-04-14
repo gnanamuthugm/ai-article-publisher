@@ -3,7 +3,7 @@ const path = require('path');
 const { GoogleGenAI } = require('@google/genai');
 require('dotenv').config({ path: '.env.local' });
 
-const MODEL = 'gemini-2.0-flash';
+const MODEL = 'gemini-2.5-flash';
 
 const ARTICLES_PATH = path.join(process.cwd(), 'data', 'articles.json');
 const LINKEDIN_LOG_PATH = path.join(process.cwd(), 'data', 'linkedin-posts.json');

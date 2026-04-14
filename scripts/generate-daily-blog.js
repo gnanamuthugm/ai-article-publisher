@@ -5,12 +5,12 @@ require('dotenv').config({ path: '.env.local' });
 
 // ============================================================
 // CCAIP Daily Blog Generator — Production
-// Model  : gemini-2.0-flash (stable, 1500 req/day free tier)
+// Model  : gemini-2.5-flash (best quality, pay-as-you-go)
 // Retry  : max 2 attempts, 65s wait between them
 // Safety : if both attempts fail → log and skip gracefully
 // ============================================================
 
-const MODEL = 'gemini-2.0-flash';
+const MODEL = 'gemini-2.5-flash';
 
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const SUPABASE_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
