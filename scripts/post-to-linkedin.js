@@ -3,7 +3,7 @@ const path = require('path');
 const { GoogleGenAI } = require('@google/genai');
 require('dotenv').config({ path: '.env.local' });
 
-const MODEL = 'gemini-2.5-flash';
+const MODEL = 'gemini-2.0-flash';
 
 const ARTICLES_PATH = path.join(process.cwd(), 'data', 'articles.json');
 const LINKEDIN_LOG_PATH = path.join(process.cwd(), 'data', 'linkedin-posts.json');
@@ -146,9 +146,9 @@ async function main() {
   let teaserText;
   try {
     teaserText = await generateLinkedInTeaser(article);
-    console.log('\n✅ Teaser generated:\n' + teaserText);
+    console.log('\n✅ Teaser:\n' + teaserText);
   } catch (err) {
-    console.log(`⚠️  Teaser generation failed: ${err.message.substring(0, 100)}`);
+    console.log(`⚠️  Teaser failed: ${err.message.substring(0, 100)}`);
     console.log('⏭️  Skipping LinkedIn post today.');
     return;
   }
@@ -160,7 +160,6 @@ async function main() {
     result = await postToLinkedIn(teaserText, articleUrl);
   } catch (err) {
     console.log(`⚠️  LinkedIn post failed: ${err.message.substring(0, 100)}`);
-    console.log('⏭️  Skipping LinkedIn post today.');
     return;
   }
 
@@ -187,13 +186,12 @@ async function main() {
   });
 
   if (result.simulated) {
-    console.log('\n⚠️  Simulated post (no LinkedIn credentials).');
+    console.log('\n⚠️  Simulated post.');
   } else {
     console.log(`\n🎉 Posted to LinkedIn! ID: ${result.id}`);
   }
 }
 
-// Graceful exit — never crash the workflow
 main().catch(err => {
   console.log(`⚠️  LinkedIn script error: ${err.message}`);
   console.log('⏭️  Workflow continuing safely.');

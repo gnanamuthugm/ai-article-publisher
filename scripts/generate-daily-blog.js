@@ -5,12 +5,12 @@ require('dotenv').config({ path: '.env.local' });
 
 // ============================================================
 // CCAIP Daily Blog Generator — Production
-// Model  : gemini-2.5-flash only (free tier: 20 req/day, 5 RPM)
+// Model  : gemini-2.0-flash (stable, 1500 req/day free tier)
 // Retry  : max 2 attempts, 65s wait between them
 // Safety : if both attempts fail → log and skip gracefully
 // ============================================================
 
-const MODEL = 'gemini-2.5-flash';
+const MODEL = 'gemini-2.0-flash';
 
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const SUPABASE_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
@@ -38,7 +38,6 @@ async function supabaseInsert(table, record) {
   }
 }
 
-// ── Categories ───────────────────────────────────────────────
 const CATEGORY_SCHEDULE = [
   { id: 'dialogflow-cx', name: 'Dialogflow CX', emoji: '🤖', color: 'blue', imageQuery: 'conversational AI chatbot interface', startMonth: '2026-04' },
   { id: 'conversational-agents-playbook', name: 'Conversational Agents Playbook', emoji: '📖', color: 'purple', imageQuery: 'AI assistant customer service agent', startMonth: '2026-05' },
@@ -215,7 +214,6 @@ async function fetchUnsplashImage(topicQuery, fallbackQuery) {
   return fallback;
 }
 
-// ── Gemini API — max 2 attempts, 65s wait, safe for 5 RPM ───
 async function generateArticle(topic, category) {
   const apiKey = process.env.GEMINI_API_KEY;
   if (!apiKey || apiKey.startsWith('your-')) throw new Error('GEMINI_API_KEY missing');
@@ -252,9 +250,7 @@ Return ONLY valid JSON (no markdown, no backticks):
       }
     } catch (err) {
       const msg = err.message || '';
-      const code = err.code || (msg.match(/"code":(\d+)/) || [])[1];
-      const is429or503 = msg.includes('429') || msg.includes('503') || code === 429 || code === 503;
-
+      const is429or503 = msg.includes('429') || msg.includes('503');
       if (attempt === 1 && is429or503) {
         console.log(`Waiting 65 seconds before retry...`);
         await new Promise(r => setTimeout(r, 65000));
@@ -299,15 +295,14 @@ async function main() {
     return;
   }
 
-  // Generate article — graceful failure if API unavailable
   let data;
   try {
     data = await generateArticle(topic, category);
     console.log(`✅ Article generated: "${data.title}"`);
   } catch (err) {
-    console.log(`⚠️  Gemini API failed after 2 attempts: ${err.message.substring(0, 120)}`);
-    console.log(`⏭️  Skipping article generation for today. Will retry tomorrow at 11:30 AM IST.`);
-    return; // Exit gracefully — no process.exit(1)
+    console.log(`⚠️  Gemini API failed: ${err.message.substring(0, 120)}`);
+    console.log(`⏭️  Skipping today. Will retry tomorrow at 11:30 AM IST.`);
+    return;
   }
 
   const imageUrl = await fetchUnsplashImage(data.imageQuery, category.imageQuery);
@@ -359,9 +354,8 @@ async function main() {
   console.log(`🔗 /en/blog/${slug}\n`);
 }
 
-// Graceful exit — never crash the workflow
 main().catch(err => {
   console.log(`⚠️  Unexpected error: ${err.message}`);
   console.log(`⏭️  Workflow continuing safely.`);
-  process.exit(0); // exit 0 = success (no workflow failure)
+  process.exit(0);
 });
