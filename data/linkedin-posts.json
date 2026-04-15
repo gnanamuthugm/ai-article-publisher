@@ -1,1 +1,11 @@
-[]
+[
+  {
+    "date": "2026-04-15",
+    "articleSlug": "2026-04-15-voice-bot-setup-with-dialogflow-cx-and-telephony",
+    "articleTitle": "Unlocking Voice AI: A Beginner's Guide to Dialogflow CX Telephony Bots",
+    "postText": "Ever wonder how voice bots truly work behind the scenes to answer your calls? 🤖\nThis beginner's guide demystifies Dialogflow CX and shows you how to connect your intelligent bot directly to a phone line. Learn to build real-world AI interactions from scratch.\nRead today's article 👇\n#VoiceAI #DialogflowCX #TelephonyBots #AIBots",
+    "articleUrl": "https://ai-article-publisher.vercel.app//en/blog/2026-04-15-voice-bot-setup-with-dialogflow-cx-and-telephony",
+    "linkedinPostId": "urn:li:share:7450081902427799553",
+    "postedAt": "2026-04-15T07:25:41.559Z"
+  }
+]
