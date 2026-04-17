@@ -1,9 +1,9 @@
-# Supabase — 3 Tables Setup
+# Supabase — Complete Tables Setup
 # Go to: supabase.com → Your Project → SQL Editor → New Query → Paste all → Run
 
 ```sql
 -- ══════════════════════════════════════════════
--- TABLE 1: articles — stores all blog articles
+-- TABLE 1: articles
 -- ══════════════════════════════════════════════
 create table if not exists articles (
   id                text        primary key,
@@ -20,34 +20,30 @@ create table if not exists articles (
   quiz              jsonb       default '[]',
   created_at        timestamptz default now()
 );
-
 create index if not exists idx_articles_date     on articles(date desc);
 create index if not exists idx_articles_category on articles(category);
-
 alter table articles enable row level security;
-create policy "Public read articles"   on articles for select using (true);
+create policy "Public read articles"    on articles for select using (true);
 create policy "Service insert articles" on articles for insert with check (true);
 
 -- ══════════════════════════════════════════════
--- TABLE 2: article_images — stores image data
+-- TABLE 2: article_images
 -- ══════════════════════════════════════════════
 create table if not exists article_images (
   id          uuid        default gen_random_uuid() primary key,
-  article_id  text        not null references articles(id) on delete cascade,
+  article_id  text        not null,
   image_url   text        not null,
   image_query text,
   source      text        default 'unsplash',
   created_at  timestamptz default now()
 );
-
 create index if not exists idx_images_article_id on article_images(article_id);
-
 alter table article_images enable row level security;
 create policy "Public read images"    on article_images for select using (true);
 create policy "Service insert images" on article_images for insert with check (true);
 
 -- ══════════════════════════════════════════════
--- TABLE 3: linkedin_posts — stores LinkedIn post logs
+-- TABLE 3: linkedin_posts
 -- ══════════════════════════════════════════════
 create table if not exists linkedin_posts (
   id               uuid        default gen_random_uuid() primary key,
@@ -58,16 +54,14 @@ create table if not exists linkedin_posts (
   linkedin_post_id text,
   posted_at        timestamptz default now()
 );
-
 create index if not exists idx_linkedin_article_id on linkedin_posts(article_id);
 create index if not exists idx_linkedin_posted_at  on linkedin_posts(posted_at desc);
-
 alter table linkedin_posts enable row level security;
 create policy "Public read linkedin_posts"    on linkedin_posts for select using (true);
 create policy "Service insert linkedin_posts" on linkedin_posts for insert with check (true);
 
 -- ══════════════════════════════════════════════
--- TABLE 4: comments (already exists — keeping it)
+-- TABLE 4: comments
 -- ══════════════════════════════════════════════
 create table if not exists comments (
   id          uuid        default gen_random_uuid() primary key,
@@ -77,12 +71,66 @@ create table if not exists comments (
   created_at  timestamptz default now(),
   updated_at  timestamptz
 );
-
 create index if not exists idx_comments_article_id on comments(article_id);
-
 alter table comments enable row level security;
 create policy "Public read comments"   on comments for select using (true);
 create policy "Public insert comments" on comments for insert with check (true);
 create policy "Public update comments" on comments for update using (true);
 create policy "Public delete comments" on comments for delete using (true);
+
+-- ══════════════════════════════════════════════
+-- TABLE 5: commentlog (edit/delete audit trail)
+-- ══════════════════════════════════════════════
+create table if not exists commentlog (
+  id          uuid        default gen_random_uuid() primary key,
+  comment_id  uuid        not null,
+  article_id  text        not null,
+  user_name   text        not null,
+  action      text        not null check (action in ('edit', 'delete')),
+  old_content text        not null,
+  new_content text,
+  edited_at   timestamptz default now()
+);
+create index if not exists idx_commentlog_comment_id on commentlog(comment_id);
+create index if not exists idx_commentlog_article_id on commentlog(article_id);
+alter table commentlog enable row level security;
+create policy "Public read commentlog"   on commentlog for select using (true);
+create policy "Public insert commentlog" on commentlog for insert with check (true);
+
+-- ══════════════════════════════════════════════
+-- TABLE 6: article_views (visit counter)
+-- ══════════════════════════════════════════════
+create table if not exists article_views (
+  article_id  text        primary key,
+  view_count  integer     default 0 not null,
+  updated_at  timestamptz default now()
+);
+alter table article_views enable row level security;
+create policy "Public read views"   on article_views for select using (true);
+create policy "Public insert views" on article_views for insert with check (true);
+create policy "Public update views" on article_views for update using (true);
+
+-- Function to increment view count (upsert)
+create or replace function increment_article_views(article_slug text)
+returns void as $$
+begin
+  insert into article_views (article_id, view_count, updated_at)
+  values (article_slug, 1, now())
+  on conflict (article_id)
+  do update set
+    view_count = article_views.view_count + 1,
+    updated_at = now();
+end;
+$$ language plpgsql security definer;
 ```
+
+## Tables Summary
+
+| Table | What it stores |
+|---|---|
+| `articles` | All blog articles — title, content, quiz, tags |
+| `article_images` | Image URL, search query per article |
+| `linkedin_posts` | LinkedIn post text, URL, post ID |
+| `comments` | User comments per article |
+| `commentlog` | Edit/delete audit trail for comments |
+| `article_views` | Visit count per article |

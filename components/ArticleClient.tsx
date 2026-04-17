@@ -1,9 +1,10 @@
 "use client";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Link from "next/link";
 import LanguageSwitcher from "@/components/LanguageSwitcher";
 import QuizSection from "@/components/QuizSection";
 import CommentsSection from "@/components/CommentsSection";
+import { createClient } from "@supabase/supabase-js";
 
 interface Article {
   slug: string;
@@ -32,14 +33,57 @@ function getCategoryStyle(color: string) {
   return styles[color] || "bg-gray-100 text-gray-700";
 }
 
+// Article download helper
+function downloadArticle(article: Article) {
+  const text = `${article.title}\n${'='.repeat(article.title.length)}\n\n${article.summary}\n\n${article.content.replace(/<[^>]+>/g, '')}\n\nReal-World Example:\n${article.realWorldExample}\n\nKey Takeaways:\n${article.keyPoints.map((p, i) => `${i + 1}. ${p}`).join('\n')}`;
+  const blob = new Blob([text], { type: 'text/plain' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `${article.slug}.txt`;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
 export default function ArticleClient({ article, lang }: { article: Article; lang: string }) {
   const [displayContent, setDisplayContent] = useState(article.content);
   const [currentLang, setCurrentLang] = useState("en");
+  const [visitCount, setVisitCount] = useState<number | null>(null);
 
   function handleTranslated(lang: string, translated: string) {
     setCurrentLang(lang);
     setDisplayContent(translated);
   }
+
+  // Track article visit count via Supabase
+  useEffect(() => {
+    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+    const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+    if (!supabaseUrl || !supabaseKey || !supabaseUrl.startsWith("https://")) return;
+
+    const supabase = createClient(supabaseUrl, supabaseKey);
+
+    async function trackVisit() {
+      try {
+        // Increment visit count
+        const { error: rpcError } = await supabase.rpc('increment_article_views', {
+          article_slug: article.slug
+        });
+
+        // Fetch current count
+        const { data } = await supabase
+          .from('article_views')
+          .select('view_count')
+          .eq('article_id', article.slug)
+          .single();
+
+        if (data) setVisitCount(data.view_count);
+      } catch (e) {
+        // Views table may not exist yet — silently skip
+      }
+    }
+    trackVisit();
+  }, [article.slug]);
 
   const categoryStyle = getCategoryStyle(article.categoryColor || "blue");
 
@@ -74,9 +118,14 @@ export default function ArticleClient({ article, lang }: { article: Article; lan
           />
         )}
 
-        {/* Date + Tags */}
+        {/* Date + Tags + Visit count */}
         <div className="flex items-center gap-2 mb-3 flex-wrap">
           <span className="text-sm text-gray-400">{article.date}</span>
+          {visitCount !== null && (
+            <span className="text-xs text-gray-400 flex items-center gap-1">
+              👁️ {visitCount.toLocaleString()} views
+            </span>
+          )}
           {article.tags?.map((tag: string) => (
             <span key={tag} className="text-xs bg-blue-50 text-blue-600 px-2 py-0.5 rounded-full">
               #{tag}
@@ -87,30 +136,7 @@ export default function ArticleClient({ article, lang }: { article: Article; lan
         {/* Title */}
         <h1 className="text-3xl font-bold text-gray-900 mb-4 leading-tight">{article.title}</h1>
 
-        {/* Author row — top of article */}
-        <div className="flex items-center gap-3 mb-6 p-4 bg-white rounded-xl border border-gray-100 shadow-sm">
-          <img
-            src="/images/profile.png"
-            alt="Gnanamuthu G"
-            className="w-12 h-12 rounded-full object-cover border-2 border-blue-100 flex-shrink-0"
-          />
-          <div>
-            <p className="font-semibold text-gray-900 text-sm">Gnanamuthu G</p>
-            <p className="text-gray-500 text-xs">AI &amp; Contact Center Expert · Google CCAIP Specialist</p>
-            <div className="flex items-center gap-3 mt-1 flex-wrap">
-              <a href="https://www.linkedin.com/in/gnanamuthugm" target="_blank" rel="noopener noreferrer"
-                className="text-xs text-blue-600 hover:underline">💼 LinkedIn</a>
-              <a href="https://gnanamuthugm.github.io/portfolio/" target="_blank" rel="noopener noreferrer"
-                className="text-xs text-gray-500 hover:underline">🌐 Portfolio</a>
-              <a href="https://topmate.io/gnanamuthugm" target="_blank" rel="noopener noreferrer"
-                className="text-xs text-green-600 hover:underline">📥 Download PDF</a>
-              <a href="https://github.com/gnanamuthugm" target="_blank" rel="noopener noreferrer"
-                className="text-xs text-gray-500 hover:underline">🐙 GitHub</a>
-            </div>
-          </div>
-        </div>
-
-        {/* Summary box */}
+        {/* Summary box — NO author row here */}
         <div className="bg-blue-50 border-l-4 border-blue-500 p-4 rounded-r-xl mb-8">
           <p className="font-semibold text-blue-800 mb-1">📌 What you&apos;ll learn today</p>
           <p className="text-blue-700 text-sm leading-relaxed">{article.summary}</p>
@@ -128,14 +154,6 @@ export default function ArticleClient({ article, lang }: { article: Article; lan
           dangerouslySetInnerHTML={{ __html: displayContent }}
         />
 
-        {/* Real-World Example */}
-        {article.realWorldExample && (
-          <div className="bg-green-50 border border-green-200 p-5 rounded-2xl mb-8">
-            <h3 className="font-bold text-green-800 mb-2">🌍 Real-World Example</h3>
-            <p className="text-green-700 text-sm leading-relaxed">{article.realWorldExample}</p>
-          </div>
-        )}
-
         {/* Key Takeaways */}
         {article.keyPoints?.length > 0 && (
           <div className="bg-yellow-50 border border-yellow-200 p-5 rounded-2xl mb-8">
@@ -151,14 +169,8 @@ export default function ArticleClient({ article, lang }: { article: Article; lan
           </div>
         )}
 
-        {/* Quiz */}
-        <QuizSection questions={article.quiz || []} />
-
-        {/* Comments */}
-        <CommentsSection articleSlug={article.slug} />
-
-        {/* Author Bio — bottom of article */}
-        <div className="mt-10 p-6 bg-white rounded-2xl border border-gray-100 shadow-sm">
+        {/* About the Author — BEFORE Real-World Example */}
+        <div className="mb-8 p-6 bg-white rounded-2xl border border-gray-100 shadow-sm">
           <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-4">About the Author</p>
           <div className="flex items-start gap-4">
             <img
@@ -169,7 +181,7 @@ export default function ArticleClient({ article, lang }: { article: Article; lan
             <div>
               <p className="font-bold text-gray-900 text-base">Gnanamuthu G</p>
               <p className="text-gray-500 text-sm mt-1 leading-relaxed">
-                AI &amp; Contact Center specialist with hands-on expertise in Google CCAIP, Dialogflow CX, and Conversational AI. 
+                AI &amp; Contact Center specialist with hands-on expertise in Google CCAIP, Dialogflow CX, and Conversational AI.
                 Passionate about helping teams build intelligent customer experiences and crack the CCAIP certification.
               </p>
               <div className="flex items-center gap-4 mt-3 flex-wrap">
@@ -179,16 +191,34 @@ export default function ArticleClient({ article, lang }: { article: Article; lan
                   className="text-sm text-gray-600 hover:underline font-medium">🌐 Portfolio</a>
                 <a href="https://github.com/gnanamuthugm" target="_blank" rel="noopener noreferrer"
                   className="text-sm text-gray-600 hover:underline font-medium">🐙 GitHub</a>
-                <a href="https://topmate.io/gnanamuthugm" target="_blank" rel="noopener noreferrer"
-                  className="text-sm text-green-600 hover:underline font-medium">📥 Download PDF</a>
+                <button
+                  onClick={() => downloadArticle(article)}
+                  className="text-sm text-green-600 hover:underline font-medium flex items-center gap-1"
+                >
+                  📥 Download Article
+                </button>
               </div>
             </div>
           </div>
         </div>
+
+        {/* Real-World Example — AFTER About the Author */}
+        {article.realWorldExample && (
+          <div className="bg-green-50 border border-green-200 p-5 rounded-2xl mb-8">
+            <h3 className="font-bold text-green-800 mb-2">🌍 Real-World Example</h3>
+            <p className="text-green-700 text-sm leading-relaxed">{article.realWorldExample}</p>
+          </div>
+        )}
+
+        {/* Quiz */}
+        <QuizSection questions={article.quiz || []} />
+
+        {/* Comments */}
+        <CommentsSection articleSlug={article.slug} />
       </main>
 
       <footer className="text-center py-8 text-gray-400 text-sm border-t border-gray-100 mt-8">
-        <p>Learn Daily by <a href="https://www.linkedin.com/in/gnanamuthugm" className="text-blue-500 hover:underline">Gnanamuthu G</a> · New article every morning at 11:30 AM IST</p>
+        <p>Learn Daily by <a href="https://www.linkedin.com/in/gnanamuthugm" className="text-blue-500 hover:underline">Gnanamuthu G</a></p>
       </footer>
     </div>
   );

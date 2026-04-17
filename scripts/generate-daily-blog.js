@@ -5,12 +5,12 @@ require('dotenv').config({ path: '.env.local' });
 
 // ============================================================
 // CCAIP Daily Blog Generator — Production
-// Model  : gemini-2.5-flash (best quality, pay-as-you-go)
-// Retry  : max 2 attempts, 65s wait between them
+// Model  : gemini-2.0-flash (1500 RPD free tier — avoids 429s)
+// Retry  : max 2 attempts, 30s wait between them
 // Safety : if both attempts fail → log and skip gracefully
 // ============================================================
 
-const MODEL = 'gemini-2.5-flash';
+const MODEL = 'gemini-2.0-flash';
 
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const SUPABASE_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
@@ -252,8 +252,8 @@ Return ONLY valid JSON (no markdown, no backticks):
       const msg = err.message || '';
       const is429or503 = msg.includes('429') || msg.includes('503');
       if (attempt === 1 && is429or503) {
-        console.log(`Waiting 65 seconds before retry...`);
-        await new Promise(r => setTimeout(r, 65000));
+        console.log(`Waiting 30 seconds before retry...`);
+        await new Promise(r => setTimeout(r, 30000));
         continue;
       }
       throw err;

@@ -47,7 +47,6 @@ export default async function HomePage({ params, searchParams }: HomePageProps) 
   }
 
   const allArticles = articlesData as any[];
-
   const filtered =
     !category || category === "all"
       ? allArticles
@@ -57,7 +56,7 @@ export default async function HomePage({ params, searchParams }: HomePageProps) 
 
   return (
     <div className="min-h-screen bg-gray-50">
-      {/* Hero */}
+      {/* Hero — no timing text */}
       <section className="bg-gradient-to-br from-blue-600 to-blue-900 text-white">
         <div className="max-w-5xl mx-auto px-4 py-14 text-center">
           <h1 className="text-4xl md:text-5xl font-bold mb-3">Learn Daily</h1>
@@ -65,12 +64,12 @@ export default async function HomePage({ params, searchParams }: HomePageProps) 
             One concept a day — from zero to expert in AI &amp; Contact Centers
           </p>
           <p className="text-blue-200 text-sm">
-            📅 New article every morning at 11:30 AM IST · Dialogflow CX · CCAIP · CES · Conversational AI
+            📅 New article every day · Dialogflow CX · CCAIP · CES · Conversational AI
           </p>
         </div>
       </section>
 
-      {/* Author Banner */}
+      {/* Author Banner — Download PDF → Interview Questions */}
       <section className="bg-white border-b border-gray-100">
         <div className="max-w-5xl mx-auto px-4 py-5 flex items-center gap-4">
           <img
@@ -98,7 +97,7 @@ export default async function HomePage({ params, searchParams }: HomePageProps) 
               </a>
               <a href="https://topmate.io/gnanamuthugm" target="_blank" rel="noopener noreferrer"
                 className="text-xs text-green-600 hover:underline flex items-center gap-1">
-                  📥 Download PDF
+                📋 Interview Questions
               </a>
             </div>
           </div>
@@ -136,7 +135,6 @@ export default async function HomePage({ params, searchParams }: HomePageProps) 
           <div className="text-center py-20 text-gray-400">
             <p className="text-5xl mb-4">📭</p>
             <p className="text-xl font-semibold">No articles yet</p>
-            <p className="text-sm mt-2">First article publishes tomorrow at 11:30 AM IST!</p>
           </div>
         ) : (
           <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
@@ -161,7 +159,6 @@ export default async function HomePage({ params, searchParams }: HomePageProps) 
                     <p className="text-gray-500 text-sm line-clamp-2 mb-4">
                       {article.summary}
                     </p>
-                    {/* Mini author row */}
                     <div className="flex items-center gap-2 mb-3">
                       <img
                         src="/images/profile.png"
@@ -183,7 +180,7 @@ export default async function HomePage({ params, searchParams }: HomePageProps) 
       </main>
 
       <footer className="text-center py-8 text-gray-400 text-sm border-t border-gray-100 mt-4">
-        <p>Learn Daily by <a href="https://www.linkedin.com/in/gnanamuthugm" className="text-blue-500 hover:underline">Gnanamuthu G</a> · New article every morning at 11:30 AM IST</p>
+        <p>Learn Daily by <a href="https://www.linkedin.com/in/gnanamuthugm" className="text-blue-500 hover:underline">Gnanamuthu G</a></p>
       </footer>
     </div>
   );

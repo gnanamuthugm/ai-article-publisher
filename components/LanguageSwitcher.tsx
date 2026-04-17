@@ -15,7 +15,7 @@ const LANGUAGES = [
 ];
 
 interface LanguageSwitcherProps {
-  articleContent: string;         // full HTML content of the article
+  articleContent: string;
   onTranslated: (lang: string, translatedContent: string) => void;
   currentLang: string;
 }
@@ -29,9 +29,9 @@ export default function LanguageSwitcher({
   const [loading, setLoading] = useState(false);
   const [activeLang, setActiveLang] = useState(currentLang || "en");
   const [cache, setCache] = useState<Record<string, string>>({ en: articleContent });
+  const [errorMsg, setErrorMsg] = useState("");
   const ref = useRef<HTMLDivElement>(null);
 
-  // Close dropdown on outside click
   useEffect(() => {
     function handleClick(e: MouseEvent) {
       if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
@@ -40,11 +40,17 @@ export default function LanguageSwitcher({
     return () => document.removeEventListener("mousedown", handleClick);
   }, []);
 
+  // Auto-clear error after 4s
+  useEffect(() => {
+    if (!errorMsg) return;
+    const t = setTimeout(() => setErrorMsg(""), 4000);
+    return () => clearTimeout(t);
+  }, [errorMsg]);
+
   async function switchLanguage(langCode: string) {
     setOpen(false);
     if (langCode === activeLang) return;
 
-    // If English or already cached — instant switch
     if (langCode === "en") {
       setActiveLang("en");
       onTranslated("en", cache["en"] || articleContent);
@@ -56,8 +62,8 @@ export default function LanguageSwitcher({
       return;
     }
 
-    // Translate via Gemini API
     setLoading(true);
+    setErrorMsg("");
     try {
       const langLabel = LANGUAGES.find(l => l.code === langCode)?.label || langCode;
       const res = await fetch("/api/translate", {
@@ -73,13 +79,13 @@ export default function LanguageSwitcher({
       if (!res.ok) throw new Error("Translation failed");
       const { translated } = await res.json();
 
-      // Cache it
       setCache(prev => ({ ...prev, [langCode]: translated }));
       setActiveLang(langCode);
       onTranslated(langCode, translated);
     } catch (e) {
       console.error("Translation error:", e);
-      alert("Translation failed. Please try again.");
+      // Show inline error — no blocking alert()
+      setErrorMsg("Translation failed. Please try again.");
     } finally {
       setLoading(false);
     }
@@ -112,6 +118,13 @@ export default function LanguageSwitcher({
           </>
         )}
       </button>
+
+      {/* Inline error toast — no alert() popup */}
+      {errorMsg && (
+        <div className="absolute right-0 top-12 z-50 bg-red-50 border border-red-200 text-red-600 text-xs px-3 py-2 rounded-xl shadow-md whitespace-nowrap">
+          ⚠️ {errorMsg}
+        </div>
+      )}
 
       {open && (
         <div className="absolute right-0 top-11 z-50 bg-white border border-gray-200 rounded-2xl shadow-xl py-2 min-w-[180px]">

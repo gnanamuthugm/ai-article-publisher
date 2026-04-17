@@ -3,7 +3,7 @@ const path = require('path');
 const { GoogleGenAI } = require('@google/genai');
 require('dotenv').config({ path: '.env.local' });
 
-const MODEL = 'gemini-2.5-flash';
+const MODEL = 'gemini-2.0-flash';
 
 const ARTICLES_PATH = path.join(process.cwd(), 'data', 'articles.json');
 const LINKEDIN_LOG_PATH = path.join(process.cwd(), 'data', 'linkedin-posts.json');
@@ -63,8 +63,8 @@ Return ONLY the post text.`;
       const msg = err.message || '';
       const is429or503 = msg.includes('429') || msg.includes('503');
       if (attempt === 1 && is429or503) {
-        console.log(`Waiting 65 seconds before retry...`);
-        await new Promise(r => setTimeout(r, 65000));
+        console.log(`Waiting 30 seconds before retry...`);
+        await new Promise(r => setTimeout(r, 30000));
         continue;
       }
       throw err;
