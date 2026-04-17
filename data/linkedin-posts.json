@@ -1,5 +1,14 @@
 [
   {
+    "date": "2026-04-17",
+    "articleSlug": "2026-04-17-handling-fallbacks-and-no-match-events",
+    "articleTitle": "Mastering Fallbacks and No-Match Events in Dialogflow CX",
+    "postText": "What happens when your Dialogflow CX agent simply doesn't get it? 🤔\nUnlock expert techniques to manage fallbacks and no-match events.\nEnsure your users always have a smooth, helpful conversational experience.\nRead today's article 👇\n#DialogflowCX #ConversationalAI #Chatbots #AIDevelopment",
+    "articleUrl": "https://ai-article-publisher.vercel.app//en/blog/2026-04-17-handling-fallbacks-and-no-match-events",
+    "linkedinPostId": "urn:li:share:7450806732957822976",
+    "postedAt": "2026-04-17T07:25:54.608Z"
+  },
+  {
     "date": "2026-04-16",
     "articleSlug": "2026-04-15-voice-bot-setup-with-dialogflow-cx-and-telephony",
     "articleTitle": "Unlocking Voice AI: A Beginner's Guide to Dialogflow CX Telephony Bots",
