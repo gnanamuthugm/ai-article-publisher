@@ -25,9 +25,9 @@ interface Article {
 
 function getCategoryStyle(color: string) {
   const styles: Record<string, string> = {
-    blue:   "bg-blue-100 text-blue-700",
+    blue: "bg-blue-100 text-blue-700",
     purple: "bg-purple-100 text-purple-700",
-    green:  "bg-green-100 text-green-700",
+    green: "bg-green-100 text-green-700",
     orange: "bg-orange-100 text-orange-700",
   };
   return styles[color] || "bg-gray-100 text-gray-700";
@@ -154,21 +154,6 @@ export default function ArticleClient({ article, lang }: { article: Article; lan
           dangerouslySetInnerHTML={{ __html: displayContent }}
         />
 
-        {/* Key Takeaways */}
-        {article.keyPoints?.length > 0 && (
-          <div className="bg-yellow-50 border border-yellow-200 p-5 rounded-2xl mb-8">
-            <h3 className="font-bold text-yellow-800 mb-3">⭐ Key Takeaways</h3>
-            <ul className="space-y-2">
-              {article.keyPoints.map((point: string, i: number) => (
-                <li key={i} className="flex items-start gap-2 text-sm text-yellow-700">
-                  <span className="text-yellow-500 font-bold mt-0.5">✓</span>
-                  <span>{point}</span>
-                </li>
-              ))}
-            </ul>
-          </div>
-        )}
-
         {/* About the Author — BEFORE Real-World Example */}
         <div className="mb-8 p-6 bg-white rounded-2xl border border-gray-100 shadow-sm">
           <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-4">About the Author</p>
@@ -201,6 +186,21 @@ export default function ArticleClient({ article, lang }: { article: Article; lan
             </div>
           </div>
         </div>
+
+        {/* Key Takeaways */}
+        {article.keyPoints?.length > 0 && (
+          <div className="bg-yellow-50 border border-yellow-200 p-5 rounded-2xl mb-8">
+            <h3 className="font-bold text-yellow-800 mb-3">⭐ Key Takeaways</h3>
+            <ul className="space-y-2">
+              {article.keyPoints.map((point: string, i: number) => (
+                <li key={i} className="flex items-start gap-2 text-sm text-yellow-700">
+                  <span className="text-yellow-500 font-bold mt-0.5">✓</span>
+                  <span>{point}</span>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
 
         {/* Real-World Example — AFTER About the Author */}
         {article.realWorldExample && (
