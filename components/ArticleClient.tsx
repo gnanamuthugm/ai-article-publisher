@@ -5,6 +5,8 @@ import LanguageSwitcher from "@/components/LanguageSwitcher";
 import QuizSection from "@/components/QuizSection";
 import CommentsSection from "@/components/CommentsSection";
 import { createClient } from "@supabase/supabase-js";
+import jsPDF from 'jspdf';
+import html2canvas from 'html2canvas';
 
 interface Article {
   slug: string;
@@ -33,7 +35,7 @@ function getCategoryStyle(color: string) {
   return styles[color] || "bg-gray-100 text-gray-700";
 }
 
-// Article download helper
+// Article download helper - Text format
 function downloadArticle(article: Article) {
   const text = `${article.title}\n${'='.repeat(article.title.length)}\n\n${article.summary}\n\n${article.content.replace(/<[^>]+>/g, '')}\n\nReal-World Example:\n${article.realWorldExample}\n\nKey Takeaways:\n${article.keyPoints.map((p, i) => `${i + 1}. ${p}`).join('\n')}`;
   const blob = new Blob([text], { type: 'text/plain' });
@@ -43,6 +45,109 @@ function downloadArticle(article: Article) {
   a.download = `${article.slug}.txt`;
   a.click();
   URL.revokeObjectURL(url);
+}
+
+// Article download helper - PDF format
+async function downloadArticleAsPDF(article: Article) {
+  try {
+    // Show loading state
+    const button = document.querySelector('[data-pdf-download]') as HTMLButtonElement;
+    if (button) {
+      button.disabled = true;
+      button.innerHTML = '⏳ Generating PDF...';
+    }
+
+    // Create a temporary div with article content
+    const tempDiv = document.createElement('div');
+    tempDiv.style.position = 'absolute';
+    tempDiv.style.left = '-9999px';
+    tempDiv.style.width = '800px';
+    tempDiv.style.padding = '40px';
+    tempDiv.style.fontFamily = 'Arial, sans-serif';
+    tempDiv.style.fontSize = '14px';
+    tempDiv.style.lineHeight = '1.6';
+    tempDiv.style.color = '#333';
+    tempDiv.style.backgroundColor = 'white';
+    
+    tempDiv.innerHTML = `
+      <div style="margin-bottom: 30px;">
+        <h1 style="color: #1f2937; font-size: 24px; margin-bottom: 10px; font-weight: bold;">${article.title}</h1>
+        <p style="color: #6b7280; font-size: 12px; margin-bottom: 20px;">${article.date} | ${article.categoryName}</p>
+        <div style="background-color: #eff6ff; border-left: 4px solid #3b82f6; padding: 15px; margin-bottom: 20px;">
+          <p style="font-weight: bold; color: #1e40af; margin-bottom: 5px; font-size: 14px;">📌 What you'll learn today</p>
+          <p style="color: #1e40af; font-size: 13px;">${article.summary}</p>
+        </div>
+      </div>
+      <div style="margin-bottom: 30px;">
+        ${article.content}
+      </div>
+      ${article.realWorldExample ? `
+        <div style="background-color: #f0fdf4; border: 1px solid #86efac; padding: 20px; margin-bottom: 20px; border-radius: 8px;">
+          <h3 style="color: #166534; font-weight: bold; margin-bottom: 10px; font-size: 16px;">🌍 Real-World Example</h3>
+          <p style="color: #166534; font-size: 13px; line-height: 1.6;">${article.realWorldExample}</p>
+        </div>
+      ` : ''}
+      ${article.keyPoints?.length > 0 ? `
+        <div style="background-color: #fefce8; border: 1px solid #fde047; padding: 20px; margin-bottom: 20px; border-radius: 8px;">
+          <h3 style="color: #854d0e; font-weight: bold; margin-bottom: 10px; font-size: 16px;">⭐ Key Takeaways</h3>
+          <ul style="margin: 0; padding-left: 20px;">
+            ${article.keyPoints.map(point => `<li style="color: #854d0e; font-size: 13px; margin-bottom: 5px;">${point}</li>`).join('')}
+          </ul>
+        </div>
+      ` : ''}
+      <div style="margin-top: 40px; padding-top: 20px; border-top: 1px solid #e5e7eb; font-size: 11px; color: #6b7280;">
+        <p>Generated from Learn Daily by Gnanamuthu G | https://gnanamuthugm.github.io/portfolio/</p>
+      </div>
+    `;
+
+    document.body.appendChild(tempDiv);
+
+    // Convert to canvas
+    const canvas = await html2canvas(tempDiv, {
+      scale: 2,
+      useCORS: true,
+      allowTaint: true,
+      backgroundColor: '#ffffff'
+    });
+
+    // Create PDF
+    const imgData = canvas.toDataURL('image/png');
+    const pdf = new jsPDF('p', 'mm', 'a4');
+    const imgWidth = 210; // A4 width in mm
+    const pageHeight = 297; // A4 height in mm
+    const imgHeight = (canvas.height * imgWidth) / canvas.width;
+    let heightLeft = imgHeight;
+    let position = 0;
+
+    // Add first page
+    pdf.addImage(imgData, 'PNG', 0, position, imgWidth, imgHeight);
+    heightLeft -= pageHeight;
+
+    // Add additional pages if needed
+    while (heightLeft >= 0) {
+      position = heightLeft - imgHeight;
+      pdf.addPage();
+      pdf.addImage(imgData, 'PNG', 0, position, imgWidth, imgHeight);
+      heightLeft -= pageHeight;
+    }
+
+    // Save PDF
+    pdf.save(`${article.slug}.pdf`);
+
+    // Clean up
+    document.body.removeChild(tempDiv);
+
+  } catch (error) {
+    console.error('Error generating PDF:', error);
+    alert('Failed to generate PDF. Please try again.');
+  } finally {
+    // Reset button state
+    const button = document.querySelector('[data-pdf-download]') as HTMLButtonElement;
+    if (button) {
+      button.disabled = false;
+      button.innerHTML = '📄 Download PDF';
+    }
+  }
 }
 
 export default function ArticleClient({ article, lang }: { article: Article; lang: string }) {
@@ -180,7 +285,14 @@ export default function ArticleClient({ article, lang }: { article: Article; lan
                   onClick={() => downloadArticle(article)}
                   className="text-sm text-green-600 hover:underline font-medium flex items-center gap-1"
                 >
-                  📥 Download Article
+                  � Download Text
+                </button>
+                <button
+                  onClick={() => downloadArticleAsPDF(article)}
+                  data-pdf-download
+                  className="text-sm text-red-600 hover:underline font-medium flex items-center gap-1"
+                >
+                  📋 Download PDF
                 </button>
               </div>
             </div>

@@ -2,8 +2,9 @@ name: Daily CCAIP Blog Publisher
 
 on:
   schedule:
-    - cron: '0 6 * * *'   # 11:30 AM IST every day (UTC 6:00 = IST 11:30)
-  workflow_dispatch:        # Manual trigger only when needed
+    - cron: '0 6 * * *'   # Runs every day at 11:30 AM IST
+    # Script itself handles alternate-day logic (post → skip → post → skip)
+  workflow_dispatch:        # Manual trigger when needed
 
 jobs:
   publish:
@@ -26,7 +27,7 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Generate blog article
+      - name: Generate blog article (alternate days)
         env:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
           UNSPLASH_ACCESS_KEY: ${{ secrets.UNSPLASH_ACCESS_KEY }}
@@ -42,7 +43,7 @@ jobs:
           git diff --staged --quiet || git commit -m "📚 article: $(date +'%Y-%m-%d')"
           git push origin main
 
-      - name: Post to LinkedIn
+      - name: Post to LinkedIn (alternate days)
         continue-on-error: true
         env:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}

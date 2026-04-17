@@ -63,8 +63,8 @@ Return ONLY the post text.`;
       const msg = err.message || '';
       const is429or503 = msg.includes('429') || msg.includes('503');
       if (attempt === 1 && is429or503) {
-        console.log(`Waiting 30 seconds before retry...`);
-        await new Promise(r => setTimeout(r, 30000));
+        console.log(`Waiting 65 seconds before retry...`);
+        await new Promise(r => setTimeout(r, 65000));
         continue;
       }
       throw err;
@@ -90,7 +90,71 @@ function savePostLog(log) {
   fs.writeFileSync(LINKEDIN_LOG_PATH, JSON.stringify(log, null, 2), 'utf8');
 }
 
-async function postToLinkedIn(teaserText, articleUrl) {
+// ── Upload image to LinkedIn and get image URN ──
+async function uploadImageToLinkedIn(imageUrl) {
+  if (!LINKEDIN_ACCESS_TOKEN || !LINKEDIN_PERSON_URN) return null;
+
+  try {
+    // Step 1: Register image upload
+    const registerRes = await fetch('https://api.linkedin.com/v2/assets?action=registerUpload', {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${LINKEDIN_ACCESS_TOKEN}`,
+        'Content-Type': 'application/json',
+        'X-Restli-Protocol-Version': '2.0.0',
+      },
+      body: JSON.stringify({
+        registerUploadRequest: {
+          recipes: ['urn:li:digitalmediaRecipe:feedshare-image'],
+          owner: LINKEDIN_PERSON_URN,
+          serviceRelationships: [{
+            relationshipType: 'OWNER',
+            identifier: 'urn:li:userGeneratedContent',
+          }],
+        },
+      }),
+    });
+
+    if (!registerRes.ok) {
+      console.log('⚠️  Image register failed — posting without image');
+      return null;
+    }
+
+    const registerData = await registerRes.json();
+    const uploadUrl = registerData.value?.uploadMechanism?.['com.linkedin.digitalmedia.uploading.MediaUploadHttpRequest']?.uploadUrl;
+    const assetUrn = registerData.value?.asset;
+
+    if (!uploadUrl || !assetUrn) return null;
+
+    // Step 2: Download image from Unsplash
+    const imgRes = await fetch(imageUrl);
+    if (!imgRes.ok) return null;
+    const imgBuffer = await imgRes.arrayBuffer();
+
+    // Step 3: Upload image to LinkedIn
+    const uploadRes = await fetch(uploadUrl, {
+      method: 'PUT',
+      headers: {
+        Authorization: `Bearer ${LINKEDIN_ACCESS_TOKEN}`,
+        'Content-Type': 'image/jpeg',
+      },
+      body: imgBuffer,
+    });
+
+    if (!uploadRes.ok) {
+      console.log('⚠️  Image upload failed — posting without image');
+      return null;
+    }
+
+    console.log(`✅ Image uploaded to LinkedIn: ${assetUrn}`);
+    return assetUrn;
+  } catch (e) {
+    console.log(`⚠️  Image upload error: ${e.message} — posting without image`);
+    return null;
+  }
+}
+
+async function postToLinkedIn(teaserText, articleUrl, imageUrn) {
   if (!LINKEDIN_ACCESS_TOKEN || !LINKEDIN_PERSON_URN) {
     console.log('\n⚠️  No LinkedIn credentials — simulated post:\n');
     console.log(teaserText);
@@ -99,6 +163,21 @@ async function postToLinkedIn(teaserText, articleUrl) {
   }
 
   const fullText = `${teaserText}\n\n🔗 Read more: ${articleUrl}`;
+
+  // Post with image if available, else text only
+  const shareContent = imageUrn ? {
+    shareCommentary: { text: fullText },
+    shareMediaCategory: 'IMAGE',
+    media: [{
+      status: 'READY',
+      description: { text: teaserText.substring(0, 200) },
+      media: imageUrn,
+      title: { text: 'Read the full article' },
+    }],
+  } : {
+    shareCommentary: { text: fullText },
+    shareMediaCategory: 'NONE',
+  };
 
   const res = await fetch('https://api.linkedin.com/v2/ugcPosts', {
     method: 'POST',
@@ -110,12 +189,7 @@ async function postToLinkedIn(teaserText, articleUrl) {
     body: JSON.stringify({
       author: LINKEDIN_PERSON_URN,
       lifecycleState: 'PUBLISHED',
-      specificContent: {
-        'com.linkedin.ugc.ShareContent': {
-          shareCommentary: { text: fullText },
-          shareMediaCategory: 'NONE',
-        },
-      },
+      specificContent: { 'com.linkedin.ugc.ShareContent': shareContent },
       visibility: { 'com.linkedin.ugc.MemberNetworkVisibility': 'PUBLIC' },
     }),
   });
@@ -155,12 +229,30 @@ async function main() {
 
   const articleUrl = `${BLOG_BASE_URL}/en/blog/${article.slug}`;
 
+  // Try uploading article image to LinkedIn
+  let imageUrn = null;
+  if (article.image) {
+    console.log(`\n🖼️  Uploading image to LinkedIn...`);
+    imageUrn = await uploadImageToLinkedIn(article.image);
+  }
+
   let result;
   try {
-    result = await postToLinkedIn(teaserText, articleUrl);
+    result = await postToLinkedIn(teaserText, articleUrl, imageUrn);
   } catch (err) {
     console.log(`⚠️  LinkedIn post failed: ${err.message.substring(0, 100)}`);
-    return;
+    // Try once more without image
+    if (imageUrn) {
+      console.log('🔄 Retrying without image...');
+      try {
+        result = await postToLinkedIn(teaserText, articleUrl, null);
+      } catch (e) {
+        console.log(`⚠️  Retry also failed: ${e.message.substring(0, 100)}`);
+        return;
+      }
+    } else {
+      return;
+    }
   }
 
   const logEntry = {
@@ -170,6 +262,7 @@ async function main() {
     postText: teaserText,
     articleUrl,
     linkedinPostId: result.id || 'simulated',
+    hasImage: !!imageUrn,
     postedAt: new Date().toISOString(),
   };
 
@@ -188,7 +281,7 @@ async function main() {
   if (result.simulated) {
     console.log('\n⚠️  Simulated post.');
   } else {
-    console.log(`\n🎉 Posted to LinkedIn! ID: ${result.id}`);
+    console.log(`\n🎉 Posted to LinkedIn! ID: ${result.id} ${imageUrn ? '(with image)' : '(text only)'}`);
   }
 }
 

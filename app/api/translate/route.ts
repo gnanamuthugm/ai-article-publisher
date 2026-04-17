@@ -28,13 +28,14 @@ IMPORTANT RULES:
 HTML to translate:
 ${content}`;
 
+    // Use gemini-2.0-flash — stable, 1500 RPD free tier
     const response = await client.models.generateContent({
-      model: "gemini-2.5-flash",
+      model: "gemini-2.0-flash",
       contents: prompt,
     });
 
     const rawText = response.text ?? content;
-    
+
     const translated = rawText
       .trim()
       .replace(/^```html\s*/i, "")
@@ -45,6 +46,9 @@ ${content}`;
     return NextResponse.json({ translated });
   } catch (error: any) {
     console.error("Translation error:", error);
-    return NextResponse.json({ error: error.message || "Translation failed" }, { status: 500 });
+    return NextResponse.json(
+      { error: error.message || "Translation failed" },
+      { status: 500 }
+    );
   }
 }

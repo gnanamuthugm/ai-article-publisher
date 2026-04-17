@@ -5,9 +5,10 @@ require('dotenv').config({ path: '.env.local' });
 
 // ============================================================
 // CCAIP Daily Blog Generator — Production
-// Model  : gemini-2.0-flash (1500 RPD free tier — avoids 429s)
-// Retry  : max 2 attempts, 30s wait between them
-// Safety : if both attempts fail → log and skip gracefully
+// Model       : gemini-2.0-flash (stable, 1500 RPD free)
+// Schedule    : Alternate days — post → skip → post → skip
+// Retry       : max 2 attempts, 65s wait
+// Safety      : graceful skip on API failure
 // ============================================================
 
 const MODEL = 'gemini-2.0-flash';
@@ -36,6 +37,14 @@ async function supabaseInsert(table, record) {
   } catch (e) {
     console.warn(`⚠️  Supabase [${table}]:`, e.message);
   }
+}
+
+// ── Alternate day check ──────────────────────────────────────
+// Day index from epoch: even = publish day, odd = skip day
+// This creates a reliable post → skip → post → skip loop
+function isPublishDay() {
+  const dayIndex = Math.floor(Date.now() / (1000 * 60 * 60 * 24));
+  return dayIndex % 2 === 0; // even days = publish
 }
 
 const CATEGORY_SCHEDULE = [
@@ -252,8 +261,8 @@ Return ONLY valid JSON (no markdown, no backticks):
       const msg = err.message || '';
       const is429or503 = msg.includes('429') || msg.includes('503');
       if (attempt === 1 && is429or503) {
-        console.log(`Waiting 30 seconds before retry...`);
-        await new Promise(r => setTimeout(r, 30000));
+        console.log(`Waiting 65 seconds before retry...`);
+        await new Promise(r => setTimeout(r, 65000));
         continue;
       }
       throw err;
@@ -275,7 +284,14 @@ function saveArticles(articles) {
 }
 
 async function main() {
-  console.log(`\n🚀 CCAIP Blog Generator [PRODUCTION — once per day]\n`);
+  console.log(`\n🚀 CCAIP Blog Generator [PRODUCTION — alternate days]\n`);
+
+  // ── Alternate day check ──
+  if (!isPublishDay()) {
+    console.log('📅 Today is a rest day (alternate day schedule).');
+    console.log('⏭️  Skipping — next publish day is tomorrow.');
+    return;
+  }
 
   const now = new Date();
   const today = now.toISOString().split('T')[0];
@@ -283,7 +299,7 @@ async function main() {
   const topic = getTodaysTopic(category.id);
   const slug = `${today}-${createSlug(topic)}`;
 
-  console.log(`📅 Date     : ${today}`);
+  console.log(`📅 Date     : ${today} (PUBLISH DAY ✅)`);
   console.log(`📂 Category : ${category.name}`);
   console.log(`📌 Topic    : "${topic}"`);
   console.log(`🤖 Model    : ${MODEL}`);
@@ -301,7 +317,7 @@ async function main() {
     console.log(`✅ Article generated: "${data.title}"`);
   } catch (err) {
     console.log(`⚠️  Gemini API failed: ${err.message.substring(0, 120)}`);
-    console.log(`⏭️  Skipping today. Will retry tomorrow at 11:30 AM IST.`);
+    console.log(`⏭️  Skipping today. Will retry on next publish day.`);
     return;
   }
 
