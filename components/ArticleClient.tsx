@@ -3,7 +3,6 @@ import { useState, useEffect } from "react";
 import Link from "next/link";
 import LanguageSwitcher from "@/components/LanguageSwitcher";
 import QuizSection from "@/components/QuizSection";
-import CommentsSection from "@/components/CommentsSection";
 import { createClient } from "@supabase/supabase-js";
 
 interface Article {
@@ -33,15 +32,83 @@ function getCategoryStyle(color: string) {
   return styles[color] || "bg-gray-100 text-gray-700";
 }
 
-// ── PDF Download ─────────────────────────────────────────────
-function downloadArticlePDF(article: Article) {
+// ── Download Article as .txt in current language ─────────────
+function downloadArticleTxt(article: Article, currentContent: string) {
+  const stripHtml = (html: string) =>
+    html
+      .replace(/<h2[^>]*>(.*?)<\/h2>/gi, '\n\n== $1 ==\n')
+      .replace(/<h3[^>]*>(.*?)<\/h3>/gi, '\n-- $1 --\n')
+      .replace(/<li[^>]*>(.*?)<\/li>/gi, '  • $1\n')
+      .replace(/<p[^>]*>(.*?)<\/p>/gi, '$1\n\n')
+      .replace(/<strong[^>]*>(.*?)<\/strong>/gi, '$1')
+      .replace(/<[^>]+>/g, '')
+      .replace(/&amp;/g, '&')
+      .replace(/&lt;/g, '<')
+      .replace(/&gt;/g, '>')
+      .replace(/&quot;/g, '"')
+      .replace(/&#39;/g, "'")
+      .replace(/\n{3,}/g, '\n\n')
+      .trim();
+
+  const content = [
+    article.title,
+    '='.repeat(article.title.length),
+    '',
+    `Date: ${article.date} | Category: ${article.categoryName}`,
+    '',
+    '📌 Summary:',
+    article.summary,
+    '',
+    '─'.repeat(60),
+    '',
+    stripHtml(currentContent),
+    '',
+    '─'.repeat(60),
+    '',
+    '🌍 Real-World Example:',
+    article.realWorldExample || '',
+    '',
+    '⭐ Key Takeaways:',
+    ...(article.keyPoints?.map((p, i) => `${i + 1}. ${p}`) || []),
+    '',
+    '─'.repeat(60),
+    '',
+    '❓ Quiz Questions:',
+    ...(article.quiz?.flatMap((q: any, i: number) => [
+      `Q${i + 1}: ${q.question}`,
+      ...q.options.map((o: string) => `  ${o.startsWith(q.answer) ? '✓ ' : '  '}${o}`),
+      '',
+    ]) || []),
+    '─'.repeat(60),
+    '',
+    'Gnanamuthu G — AI & Contact Center Expert',
+    'LinkedIn: https://www.linkedin.com/in/gnanamuthugm',
+    'Portfolio: https://gnanamuthugm.github.io/portfolio',
+    'Interview Questions: https://topmate.io/gnanamuthugm',
+  ].join('\n');
+
+  const blob = new Blob([content], { type: 'text/plain;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `${article.slug}.txt`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
+// ── PDF Download — 10% margin every page, proper format ──────
+function downloadArticlePDF(article: Article, currentContent: string) {
+  const stripHtml = (html: string) =>
+    html.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
+
   const quizHtml = article.quiz?.length
     ? article.quiz.map((q: any, i: number) => `
-        <div style="margin-bottom:20px;padding:14px 16px;background:#f8f9ff;border-left:4px solid #3b82f6;border-radius:6px;">
+        <div style="margin-bottom:20px;padding:14px 16px;background:#f8f9ff;border-left:4px solid #3b82f6;border-radius:6px;page-break-inside:avoid;">
           <p style="font-weight:700;color:#1e3a8a;margin:0 0 10px 0;font-size:14px;">Q${i + 1}: ${q.question}</p>
           ${q.options.map((opt: string) => `
-            <p style="margin:4px 0;font-size:13px;color:${opt.startsWith(q.answer) ? '#166534' : '#374151'};
-              font-weight:${opt.startsWith(q.answer) ? '700' : '400'};">
+            <p style="margin:4px 0;font-size:13px;color:${opt.startsWith(q.answer) ? '#166534' : '#374151'};font-weight:${opt.startsWith(q.answer) ? '700' : '400'};">
               ${opt.startsWith(q.answer) ? '✓ ' : ''}${opt}
             </p>`).join('')}
         </div>`).join('')
@@ -50,23 +117,23 @@ function downloadArticlePDF(article: Article) {
   const keyPointsHtml = article.keyPoints?.length
     ? article.keyPoints.map(p => `
         <div style="display:flex;gap:10px;margin-bottom:10px;align-items:flex-start;">
-          <span style="color:#d97706;font-weight:700;flex-shrink:0;margin-top:1px;">✓</span>
-          <span style="font-size:13px;color:#92400e;line-height:1.6;">${p}</span>
+          <span style="color:#d97706;font-weight:700;flex-shrink:0;">✓</span>
+          <span style="font-size:13px;color:#92400e;line-height:1.7;">${p}</span>
         </div>`).join('')
     : '';
 
-  // Process HTML content — no gis flag (use gi only)
-  let contentHtml = article.content;
+  // Process HTML — no gis flag
+  let contentHtml = currentContent;
   contentHtml = contentHtml.replace(/<h2([^>]*)>([\s\S]*?)<\/h2>/gi,
-    (_: string, _a: string, t: string) => `<h2 style="font-size:18px;font-weight:700;color:#1e3a8a;margin:32px 0 12px;padding-bottom:6px;border-bottom:2px solid #dbeafe;">${t}</h2>`);
+    (_: string, _a: string, t: string) => `<h2 style="font-size:18px;font-weight:700;color:#1e3a8a;margin:28px 0 10px;padding-bottom:6px;border-bottom:2px solid #dbeafe;">${t}</h2>`);
   contentHtml = contentHtml.replace(/<h3([^>]*)>([\s\S]*?)<\/h3>/gi,
-    (_: string, _a: string, t: string) => `<h3 style="font-size:15px;font-weight:700;color:#1d4ed8;margin:24px 0 8px;">${t}</h3>`);
+    (_: string, _a: string, t: string) => `<h3 style="font-size:15px;font-weight:700;color:#1d4ed8;margin:22px 0 8px;">${t}</h3>`);
   contentHtml = contentHtml.replace(/<h4([^>]*)>([\s\S]*?)<\/h4>/gi,
-    (_: string, _a: string, t: string) => `<h4 style="font-size:14px;font-weight:600;color:#2563eb;margin:18px 0 6px;">${t}</h4>`);
+    (_: string, _a: string, t: string) => `<h4 style="font-size:14px;font-weight:600;color:#2563eb;margin:16px 0 6px;">${t}</h4>`);
   contentHtml = contentHtml.replace(/<p([^>]*)>([\s\S]*?)<\/p>/gi,
-    (_: string, _a: string, t: string) => `<p style="margin:0 0 16px;line-height:1.8;font-size:13px;color:#374151;">${t}</p>`);
+    (_: string, _a: string, t: string) => `<p style="margin:0 0 16px;line-height:1.85;font-size:13px;color:#374151;">${t}</p>`);
   contentHtml = contentHtml.replace(/<li([^>]*)>([\s\S]*?)<\/li>/gi,
-    (_: string, _a: string, t: string) => `<li style="margin-bottom:7px;font-size:13px;color:#374151;line-height:1.7;">${t}</li>`);
+    (_: string, _a: string, t: string) => `<li style="margin-bottom:8px;font-size:13px;color:#374151;line-height:1.7;">${t}</li>`);
   contentHtml = contentHtml.replace(/<ul([^>]*)>/gi, '<ul style="margin:0 0 16px;padding-left:22px;">');
   contentHtml = contentHtml.replace(/<ol([^>]*)>/gi, '<ol style="margin:0 0 16px;padding-left:22px;">');
   contentHtml = contentHtml.replace(/<strong([^>]*)>([\s\S]*?)<\/strong>/gi,
@@ -88,19 +155,26 @@ function downloadArticlePDF(article: Article) {
     color: #111827;
     background: white;
   }
-  .page {
-    width: 210mm;
-    min-height: 297mm;
-    padding: 18mm 20mm 18mm 20mm;
-    background: white;
+
+  /* 10% margin on all sides = ~29.7mm top/bottom, ~21mm left/right on A4 */
+  @page {
+    size: A4;
+    margin: 10% 10%;
   }
-  /* First page header — only on first page */
+
+  @media print {
+    body { margin: 0; }
+  }
+
+  .page { background: white; }
+
+  /* Header — first page only via .first-only class */
   .first-header {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    margin-bottom: 6px;
-    padding-bottom: 10px;
+    margin-bottom: 14px;
+    padding-bottom: 12px;
     border-bottom: 1px solid #e5e7eb;
   }
   .category-badge {
@@ -112,106 +186,68 @@ function downloadArticlePDF(article: Article) {
     border-radius: 100px;
     display: inline-block;
   }
-  .date-text {
-    font-size: 11px;
-    color: #9ca3af;
-  }
+  .date-text { font-size: 11px; color: #9ca3af; }
+
   h1 {
     font-size: 24px;
     font-weight: 700;
     color: #111827;
     line-height: 1.3;
-    margin: 14px 0 8px;
+    margin: 14px 0 10px;
   }
-  .tags {
-    display: flex;
-    gap: 5px;
-    flex-wrap: wrap;
-    margin: 8px 0 14px;
-  }
+  .tags { display:flex; gap:5px; flex-wrap:wrap; margin:8px 0 16px; }
   .tag {
-    background: #eff6ff;
-    color: #1d4ed8;
-    font-size: 10px;
-    padding: 2px 7px;
-    border-radius: 100px;
-    font-weight: 500;
+    background:#eff6ff; color:#1d4ed8;
+    font-size:10px; padding:2px 7px;
+    border-radius:100px; font-weight:500;
   }
+
   .summary-box {
-    background: #eff6ff;
-    border-left: 4px solid #3b82f6;
-    padding: 12px 16px;
-    border-radius: 0 8px 8px 0;
-    margin: 0 0 20px;
+    background:#eff6ff;
+    border-left:4px solid #3b82f6;
+    padding:12px 16px;
+    border-radius:0 8px 8px 0;
+    margin:0 0 20px;
   }
-  .summary-label {
-    font-size: 11px;
-    font-weight: 700;
-    color: #1d4ed8;
-    margin-bottom: 4px;
-  }
-  .summary-text {
-    font-size: 13px;
-    color: #1e40af;
-    line-height: 1.6;
-  }
+  .summary-label { font-size:11px; font-weight:700; color:#1d4ed8; margin-bottom:4px; }
+  .summary-text { font-size:13px; color:#1e40af; line-height:1.6; }
+
   .feature-img {
-    width: 100%;
-    height: 200px;
-    object-fit: cover;
-    border-radius: 8px;
-    margin-bottom: 24px;
-    display: block;
+    width:100%; height:190px;
+    object-fit:cover; border-radius:8px;
+    margin-bottom:24px; display:block;
   }
-  .content-body {
-    margin-bottom: 24px;
-  }
-  .divider {
-    border: none;
-    border-top: 1px solid #e5e7eb;
-    margin: 24px 0;
-  }
-  .section-box {
-    border-radius: 8px;
-    padding: 16px 18px;
-    margin-bottom: 18px;
-  }
-  .section-title {
-    font-size: 14px;
-    font-weight: 700;
-    margin: 0 0 12px;
-  }
-  .rwe { background: #f0fdf4; border: 1px solid #bbf7d0; }
-  .rwe .section-title { color: #166534; }
-  .rwe p { font-size: 13px; color: #14532d; line-height: 1.7; margin: 0; }
-  .key { background: #fffbeb; border: 1px solid #fde68a; }
-  .key .section-title { color: #92400e; }
-  .quiz { background: #f9fafb; border: 1px solid #e5e7eb; }
-  .quiz .section-title { color: #1e3a8a; }
-  /* Footer — only on last page */
+
+  .content-body { margin-bottom:24px; }
+
+  .divider { border:none; border-top:1px solid #e5e7eb; margin:24px 0; }
+
+  .section-box { border-radius:8px; padding:16px 18px; margin-bottom:18px; page-break-inside:avoid; }
+  .section-title { font-size:14px; font-weight:700; margin:0 0 12px; }
+
+  .rwe { background:#f0fdf4; border:1px solid #bbf7d0; }
+  .rwe .section-title { color:#166534; }
+  .rwe p { font-size:13px; color:#14532d; line-height:1.7; margin:0; }
+
+  .key { background:#fffbeb; border:1px solid #fde68a; }
+  .key .section-title { color:#92400e; }
+
+  .quiz { background:#f9fafb; border:1px solid #e5e7eb; }
+  .quiz .section-title { color:#1e3a8a; }
+
   .footer {
-    margin-top: 32px;
-    padding-top: 14px;
-    border-top: 2px solid #dbeafe;
-    display: flex;
-    justify-content: space-between;
-    align-items: flex-start;
-    flex-wrap: wrap;
-    gap: 6px;
+    margin-top:28px; padding-top:14px;
+    border-top:2px solid #dbeafe;
   }
-  .footer-author { font-size: 12px; font-weight: 700; color: #1d4ed8; }
-  .footer-links { font-size: 11px; color: #6b7280; margin-top: 3px; }
-  .footer-links a { color: #2563eb; text-decoration: none; margin-right: 10px; }
-  @media print {
-    body { margin: 0; }
-    .page { padding: 15mm 18mm; }
-    @page { margin: 0; size: A4; }
-  }
+  .footer-author { font-size:12px; font-weight:700; color:#1d4ed8; margin-bottom:4px; }
+  .footer-links { font-size:11px; color:#6b7280; }
+  .footer-links a { color:#2563eb; text-decoration:none; margin-right:10px; }
 </style>
 </head>
 <body>
 <div class="page">
-  <!-- First page header only -->
+
+  <!-- First page header -->
   <div class="first-header">
     <span class="category-badge">${article.categoryEmoji} ${article.categoryName}</span>
     <span class="date-text">${article.date}</span>
@@ -230,9 +266,7 @@ function downloadArticlePDF(article: Article) {
 
   <img class="feature-img" src="${article.image}" alt="${article.title}" />
 
-  <div class="content-body">
-    ${contentHtml}
-  </div>
+  <div class="content-body">${contentHtml}</div>
 
   <hr class="divider" />
 
@@ -254,27 +288,20 @@ function downloadArticlePDF(article: Article) {
     ${quizHtml}
   </div>` : ''}
 
-  <!-- Footer — no URL, just author + links -->
   <div class="footer">
-    <div>
-      <div class="footer-author">Gnanamuthu G — AI &amp; Contact Center Expert</div>
-      <div class="footer-links">
-        <a href="https://www.linkedin.com/in/gnanamuthugm">💼 LinkedIn</a>
-        <a href="https://gnanamuthugm.github.io/portfolio">🌐 Portfolio</a>
-        <a href="https://topmate.io/gnanamuthugm">📋 Interview Questions</a>
-        <a href="https://ai-article-publisher.vercel.app">🌐 Learn Daily</a>
-      </div>
+    <div class="footer-author">Gnanamuthu G — AI &amp; Contact Center Expert</div>
+    <div class="footer-links">
+      <a href="https://www.linkedin.com/in/gnanamuthugm">💼 LinkedIn</a>
+      <a href="https://gnanamuthugm.github.io/portfolio">🌐 Portfolio</a>
+      <a href="https://topmate.io/gnanamuthugm">📋 Interview Questions</a>
     </div>
   </div>
-</div>
 
+</div>
 <script>
-  // Wait for image to load then print
   window.onload = function() {
     var img = document.querySelector('.feature-img');
-    function doPrint() {
-      setTimeout(function() { window.print(); }, 600);
-    }
+    function doPrint() { setTimeout(function(){ window.print(); }, 500); }
     if (img && !img.complete) {
       img.onload = doPrint;
       img.onerror = doPrint;
@@ -400,14 +427,24 @@ export default function ArticleClient({ article, lang }: { article: Article; lan
                 AI &amp; Contact Center specialist with expertise in Google CCAIP, Dialogflow CX, and Conversational AI.
               </p>
               <div className="flex items-center gap-4 mt-3 flex-wrap">
-                <a href="https://www.linkedin.com/in/gnanamuthugm" target="_blank" rel="noopener noreferrer" className="text-sm text-blue-600 hover:underline font-medium">💼 LinkedIn</a>
-                <a href="https://gnanamuthugm.github.io/portfolio/" target="_blank" rel="noopener noreferrer" className="text-sm text-gray-600 hover:underline font-medium">🌐 Portfolio</a>
-                <a href="https://github.com/gnanamuthugm" target="_blank" rel="noopener noreferrer" className="text-sm text-gray-600 hover:underline font-medium">🐙 GitHub</a>
+                <a href="https://www.linkedin.com/in/gnanamuthugm" target="_blank" rel="noopener noreferrer" className="text-sm text-blue-600 hover:underline font-medium">LinkedIn</a>
+                <a href="https://gnanamuthugm.github.io/portfolio/" target="_blank" rel="noopener noreferrer" className="text-sm text-gray-600 hover:underline font-medium">Portfolio</a>
+                <a href="https://github.com/gnanamuthugm" target="_blank" rel="noopener noreferrer" className="text-sm text-gray-600 hover:underline font-medium">GitHub</a>
+                {/* Download Article — saves current language as .txt locally */}
                 <button
-                  onClick={() => downloadArticlePDF(article)}
+                  onClick={() => downloadArticleTxt(article, displayContent)}
                   className="text-sm text-green-600 hover:underline font-medium flex items-center gap-1"
+                  title="Download article in current language as text"
                 >
-                  📥 Download Article
+                  Download Text
+                </button>
+                {/* Download Article as PDF */}
+                <button
+                  onClick={() => downloadArticlePDF(article, displayContent)}
+                  className="text-sm text-red-600 hover:underline font-medium flex items-center gap-1"
+                  title="Download article as PDF"
+                >
+                  Download PDF
                 </button>
               </div>
             </div>
@@ -423,7 +460,10 @@ export default function ArticleClient({ article, lang }: { article: Article; lan
         )}
 
         <QuizSection questions={article.quiz || []} />
-        <CommentsSection articleSlug={article.slug} />
+
+        {/* Comments section — hidden for now */}
+        {/* <CommentsSection articleSlug={article.slug} /> */}
+
       </main>
 
       <footer className="text-center py-8 text-gray-400 text-sm border-t border-gray-100 mt-8">
