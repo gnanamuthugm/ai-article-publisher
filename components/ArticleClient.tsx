@@ -5,8 +5,6 @@ import LanguageSwitcher from "@/components/LanguageSwitcher";
 import QuizSection from "@/components/QuizSection";
 import CommentsSection from "@/components/CommentsSection";
 import { createClient } from "@supabase/supabase-js";
-import jsPDF from 'jspdf';
-import html2canvas from 'html2canvas';
 
 interface Article {
   slug: string;
@@ -27,127 +25,253 @@ interface Article {
 
 function getCategoryStyle(color: string) {
   const styles: Record<string, string> = {
-    blue: "bg-blue-100 text-blue-700",
+    blue:   "bg-blue-100 text-blue-700",
     purple: "bg-purple-100 text-purple-700",
-    green: "bg-green-100 text-green-700",
+    green:  "bg-green-100 text-green-700",
     orange: "bg-orange-100 text-orange-700",
   };
   return styles[color] || "bg-gray-100 text-gray-700";
 }
 
-// Article download helper - Text format
-function downloadArticle(article: Article) {
-  const text = `${article.title}\n${'='.repeat(article.title.length)}\n\n${article.summary}\n\n${article.content.replace(/<[^>]+>/g, '')}\n\nReal-World Example:\n${article.realWorldExample}\n\nKey Takeaways:\n${article.keyPoints.map((p, i) => `${i + 1}. ${p}`).join('\n')}`;
-  const blob = new Blob([text], { type: 'text/plain' });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = `${article.slug}.txt`;
-  a.click();
-  URL.revokeObjectURL(url);
-}
+// ── PDF Download — proper format with image + quiz ──────────
+async function downloadArticlePDF(article: Article) {
+  // Build clean HTML for PDF
+  const stripHtml = (html: string) =>
+    html.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
 
-// Article download helper - PDF format
-async function downloadArticleAsPDF(article: Article) {
-  try {
-    // Show loading state
-    const button = document.querySelector('[data-pdf-download]') as HTMLButtonElement;
-    if (button) {
-      button.disabled = true;
-      button.innerHTML = '⏳ Generating PDF...';
-    }
+  const quizHtml = article.quiz?.length
+    ? article.quiz.map((q: any, i: number) => `
+        <div style="margin-bottom:20px;padding:14px 16px;background:#f8f9ff;border-left:4px solid #3b82f6;border-radius:6px;">
+          <p style="font-weight:700;color:#1e3a8a;margin:0 0 10px 0;font-size:14px;">Q${i + 1}: ${q.question}</p>
+          ${q.options.map((opt: string) => `
+            <p style="margin:4px 0;font-size:13px;color:${opt.startsWith(q.answer) ? '#166534' : '#374151'};
+              font-weight:${opt.startsWith(q.answer) ? '700' : '400'};">
+              ${opt.startsWith(q.answer) ? '✓ ' : ''}${opt}
+            </p>`).join('')}
+        </div>`).join('')
+    : '<p style="color:#6b7280;font-size:13px;">No quiz questions available.</p>';
 
-    // Create a temporary div with article content
-    const tempDiv = document.createElement('div');
-    tempDiv.style.position = 'absolute';
-    tempDiv.style.left = '-9999px';
-    tempDiv.style.width = '800px';
-    tempDiv.style.padding = '40px';
-    tempDiv.style.fontFamily = 'Arial, sans-serif';
-    tempDiv.style.fontSize = '14px';
-    tempDiv.style.lineHeight = '1.6';
-    tempDiv.style.color = '#333';
-    tempDiv.style.backgroundColor = 'white';
-    
-    tempDiv.innerHTML = `
-      <div style="margin-bottom: 30px;">
-        <h1 style="color: #1f2937; font-size: 24px; margin-bottom: 10px; font-weight: bold;">${article.title}</h1>
-        <p style="color: #6b7280; font-size: 12px; margin-bottom: 20px;">${article.date} | ${article.categoryName}</p>
-        <div style="background-color: #eff6ff; border-left: 4px solid #3b82f6; padding: 15px; margin-bottom: 20px;">
-          <p style="font-weight: bold; color: #1e40af; margin-bottom: 5px; font-size: 14px;">📌 What you'll learn today</p>
-          <p style="color: #1e40af; font-size: 13px;">${article.summary}</p>
-        </div>
-      </div>
-      <div style="margin-bottom: 30px;">
-        ${article.content}
-      </div>
-      ${article.realWorldExample ? `
-        <div style="background-color: #f0fdf4; border: 1px solid #86efac; padding: 20px; margin-bottom: 20px; border-radius: 8px;">
-          <h3 style="color: #166534; font-weight: bold; margin-bottom: 10px; font-size: 16px;">🌍 Real-World Example</h3>
-          <p style="color: #166534; font-size: 13px; line-height: 1.6;">${article.realWorldExample}</p>
-        </div>
-      ` : ''}
-      ${article.keyPoints?.length > 0 ? `
-        <div style="background-color: #fefce8; border: 1px solid #fde047; padding: 20px; margin-bottom: 20px; border-radius: 8px;">
-          <h3 style="color: #854d0e; font-weight: bold; margin-bottom: 10px; font-size: 16px;">⭐ Key Takeaways</h3>
-          <ul style="margin: 0; padding-left: 20px;">
-            ${article.keyPoints.map(point => `<li style="color: #854d0e; font-size: 13px; margin-bottom: 5px;">${point}</li>`).join('')}
-          </ul>
-        </div>
-      ` : ''}
-      <div style="margin-top: 40px; padding-top: 20px; border-top: 1px solid #e5e7eb; font-size: 11px; color: #6b7280;">
-        <p>Generated from Learn Daily by Gnanamuthu G | https://gnanamuthugm.github.io/portfolio/</p>
-      </div>
-    `;
+  const keyPointsHtml = article.keyPoints?.length
+    ? article.keyPoints.map(p => `
+        <div style="display:flex;gap:10px;margin-bottom:8px;align-items:flex-start;">
+          <span style="color:#d97706;font-weight:700;flex-shrink:0;">✓</span>
+          <span style="font-size:13px;color:#92400e;">${p}</span>
+        </div>`).join('')
+    : '';
 
-    document.body.appendChild(tempDiv);
+  const contentText = article.content
+    .replace(/<h2[^>]*>(.*?)<\/h2>/gi, (_, t) => `<h2 style="font-size:18px;font-weight:700;color:#1e3a8a;margin:28px 0 10px;border-bottom:2px solid #dbeafe;padding-bottom:6px;">${t}</h2>`)
+    .replace(/<h3[^>]*>(.*?)<\/h3>/gi, (_, t) => `<h3 style="font-size:15px;font-weight:700;color:#1d4ed8;margin:22px 0 8px;">${t}</h3>`)
+    .replace(/<h4[^>]*>(.*?)<\/h4>/gi, (_, t) => `<h4 style="font-size:14px;font-weight:600;color:#2563eb;margin:18px 0 6px;">${t}</h4>`)
+    .replace(/<p[^>]*>(.*?)<\/p>/gi, (_, t) => `<p style="margin:0 0 14px;line-height:1.8;font-size:13px;color:#374151;">${t}</p>`)
+    .replace(/<ul[^>]*>(.*?)<\/ul>/gis, (_, t) => `<ul style="margin:0 0 14px;padding-left:20px;">${t}</ul>`)
+    .replace(/<ol[^>]*>(.*?)<\/ol>/gis, (_, t) => `<ol style="margin:0 0 14px;padding-left:20px;">${t}</ol>`)
+    .replace(/<li[^>]*>(.*?)<\/li>/gi, (_, t) => `<li style="margin-bottom:6px;font-size:13px;color:#374151;">${t}</li>`)
+    .replace(/<strong[^>]*>(.*?)<\/strong>/gi, '<strong style="font-weight:700;color:#111827;">$1</strong>')
+    .replace(/<code[^>]*>(.*?)<\/code>/gi, '<code style="background:#f3f4f6;padding:1px 5px;border-radius:3px;font-size:12px;font-family:monospace;">$1</code>')
+    .replace(/<blockquote[^>]*>(.*?)<\/blockquote>/gis, (_, t) => `<blockquote style="border-left:4px solid #93c5fd;padding:10px 16px;margin:16px 0;background:#eff6ff;border-radius:4px;">${t}</blockquote>`)
+    .replace(/<[^>]+>/g, '');
 
-    // Convert to canvas
-    const canvas = await html2canvas(tempDiv, {
-      scale: 2,
-      useCORS: true,
-      allowTaint: true,
-      backgroundColor: '#ffffff'
-    });
-
-    // Create PDF
-    const imgData = canvas.toDataURL('image/png');
-    const pdf = new jsPDF('p', 'mm', 'a4');
-    const imgWidth = 210; // A4 width in mm
-    const pageHeight = 297; // A4 height in mm
-    const imgHeight = (canvas.height * imgWidth) / canvas.width;
-    let heightLeft = imgHeight;
-    let position = 0;
-
-    // Add first page
-    pdf.addImage(imgData, 'PNG', 0, position, imgWidth, imgHeight);
-    heightLeft -= pageHeight;
-
-    // Add additional pages if needed
-    while (heightLeft >= 0) {
-      position = heightLeft - imgHeight;
-      pdf.addPage();
-      pdf.addImage(imgData, 'PNG', 0, position, imgWidth, imgHeight);
-      heightLeft -= pageHeight;
-    }
-
-    // Save PDF
-    pdf.save(`${article.slug}.pdf`);
-
-    // Clean up
-    document.body.removeChild(tempDiv);
-
-  } catch (error) {
-    console.error('Error generating PDF:', error);
-    alert('Failed to generate PDF. Please try again.');
-  } finally {
-    // Reset button state
-    const button = document.querySelector('[data-pdf-download]') as HTMLButtonElement;
-    if (button) {
-      button.disabled = false;
-      button.innerHTML = '📄 Download PDF';
-    }
+  const html = `
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap');
+  * { box-sizing: border-box; }
+  body {
+    font-family: 'Inter', Arial, sans-serif;
+    margin: 0;
+    padding: 0;
+    color: #111827;
+    background: white;
   }
+  .page {
+    width: 794px;
+    padding: 48px 56px;
+    background: white;
+  }
+  .header-bar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 8px;
+  }
+  .category-badge {
+    background: #dbeafe;
+    color: #1e40af;
+    font-size: 11px;
+    font-weight: 600;
+    padding: 4px 10px;
+    border-radius: 100px;
+  }
+  .date {
+    font-size: 11px;
+    color: #9ca3af;
+  }
+  h1 {
+    font-size: 26px;
+    font-weight: 700;
+    color: #111827;
+    line-height: 1.3;
+    margin: 16px 0 8px;
+  }
+  .summary-box {
+    background: #eff6ff;
+    border-left: 4px solid #3b82f6;
+    padding: 14px 18px;
+    border-radius: 0 8px 8px 0;
+    margin: 20px 0 24px;
+  }
+  .summary-box .label {
+    font-size: 12px;
+    font-weight: 700;
+    color: #1d4ed8;
+    margin-bottom: 4px;
+  }
+  .summary-box p {
+    font-size: 13px;
+    color: #1e40af;
+    margin: 0;
+    line-height: 1.6;
+  }
+  .feature-image {
+    width: 100%;
+    height: 220px;
+    object-fit: cover;
+    border-radius: 10px;
+    margin-bottom: 28px;
+  }
+  .content { margin-bottom: 28px; }
+  .section-box {
+    border-radius: 8px;
+    padding: 18px 20px;
+    margin-bottom: 20px;
+  }
+  .section-title {
+    font-size: 15px;
+    font-weight: 700;
+    margin: 0 0 14px;
+  }
+  .rwe-box { background: #f0fdf4; border: 1px solid #bbf7d0; }
+  .rwe-box .section-title { color: #166534; }
+  .rwe-box p { font-size: 13px; color: #14532d; margin: 0; line-height: 1.7; }
+  .key-box { background: #fffbeb; border: 1px solid #fde68a; }
+  .key-box .section-title { color: #92400e; }
+  .quiz-box { background: #f9fafb; border: 1px solid #e5e7eb; }
+  .quiz-box .section-title { color: #1e3a8a; }
+  .divider {
+    border: none;
+    border-top: 1px solid #e5e7eb;
+    margin: 28px 0;
+  }
+  .footer {
+    margin-top: 32px;
+    padding-top: 16px;
+    border-top: 2px solid #dbeafe;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+  .footer .author { font-size: 12px; font-weight: 600; color: #1d4ed8; }
+  .footer .links { font-size: 11px; color: #6b7280; }
+  .footer a { color: #2563eb; text-decoration: none; margin-left: 8px; }
+  .tags { display: flex; gap: 6px; flex-wrap: wrap; margin: 12px 0 0; }
+  .tag {
+    background: #eff6ff;
+    color: #1d4ed8;
+    font-size: 10px;
+    padding: 2px 8px;
+    border-radius: 100px;
+    font-weight: 500;
+  }
+</style>
+</head>
+<body>
+<div class="page">
+  <!-- Header -->
+  <div class="header-bar">
+    <span class="category-badge">${article.categoryEmoji} ${article.categoryName}</span>
+    <span class="date">${article.date}</span>
+  </div>
+
+  <h1>${article.title}</h1>
+
+  <!-- Tags -->
+  <div class="tags">
+    ${article.tags?.map(t => `<span class="tag">#${t}</span>`).join('') || ''}
+  </div>
+
+  <!-- Summary -->
+  <div class="summary-box">
+    <div class="label">📌 What you'll learn today</div>
+    <p>${article.summary}</p>
+  </div>
+
+  <!-- Feature Image -->
+  <img class="feature-image" src="${article.image}" alt="${article.title}" crossorigin="anonymous" />
+
+  <!-- Article Content -->
+  <div class="content">
+    ${contentText}
+  </div>
+
+  <hr class="divider" />
+
+  <!-- Real-World Example -->
+  ${article.realWorldExample ? `
+  <div class="section-box rwe-box">
+    <div class="section-title">🌍 Real-World Example</div>
+    <p>${article.realWorldExample}</p>
+  </div>` : ''}
+
+  <!-- Key Takeaways -->
+  ${article.keyPoints?.length ? `
+  <div class="section-box key-box">
+    <div class="section-title">⭐ Key Takeaways</div>
+    ${keyPointsHtml}
+  </div>` : ''}
+
+  <!-- Quiz Questions -->
+  ${article.quiz?.length ? `
+  <div class="section-box quiz-box">
+    <div class="section-title">❓ Quiz Questions</div>
+    ${quizHtml}
+  </div>` : ''}
+
+  <!-- Footer -->
+  <div class="footer">
+    <div>
+      <div class="author">Gnanamuthu G — AI & Contact Center Expert</div>
+      <div class="links" style="margin-top:4px;">
+        Generated from Learn Daily
+        <a href="https://ai-article-publisher.vercel.app">Website</a>
+        <a href="https://www.linkedin.com/in/gnanamuthugm">LinkedIn</a>
+        <a href="https://gnanamuthugm.github.io/portfolio">Portfolio</a>
+        <a href="https://topmate.io/gnanamuthugm">Interview Questions</a>
+      </div>
+    </div>
+    <div class="date" style="font-size:11px;">ai-article-publisher.vercel.app</div>
+  </div>
+</div>
+</body>
+</html>`;
+
+  // Open in new tab and trigger print as PDF
+  const printWindow = window.open('', '_blank');
+  if (!printWindow) return;
+  printWindow.document.write(html);
+  printWindow.document.close();
+
+  // Wait for image to load then print
+  printWindow.onload = () => {
+    setTimeout(() => {
+      printWindow.print();
+    }, 800);
+  };
 }
 
 export default function ArticleClient({ article, lang }: { article: Article; lang: string }) {
@@ -160,32 +284,17 @@ export default function ArticleClient({ article, lang }: { article: Article; lan
     setDisplayContent(translated);
   }
 
-  // Track article visit count via Supabase
   useEffect(() => {
     const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
     const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
     if (!supabaseUrl || !supabaseKey || !supabaseUrl.startsWith("https://")) return;
-
     const supabase = createClient(supabaseUrl, supabaseKey);
-
     async function trackVisit() {
       try {
-        // Increment visit count
-        const { error: rpcError } = await supabase.rpc('increment_article_views', {
-          article_slug: article.slug
-        });
-
-        // Fetch current count
-        const { data } = await supabase
-          .from('article_views')
-          .select('view_count')
-          .eq('article_id', article.slug)
-          .single();
-
+        await supabase.rpc('increment_article_views', { article_slug: article.slug });
+        const { data } = await supabase.from('article_views').select('view_count').eq('article_id', article.slug).single();
         if (data) setVisitCount(data.view_count);
-      } catch (e) {
-        // Views table may not exist yet — silently skip
-      }
+      } catch (e) {}
     }
     trackVisit();
   }, [article.slug]);
@@ -194,7 +303,6 @@ export default function ArticleClient({ article, lang }: { article: Article; lan
 
   return (
     <div className="min-h-screen bg-gray-50">
-      {/* Sticky Header */}
       <header className="bg-white border-b border-gray-200 sticky top-0 z-20">
         <div className="max-w-3xl mx-auto px-4 py-3 flex items-center justify-between">
           <Link href={`/${lang}`} className="text-blue-600 hover:underline text-sm flex items-center gap-1">
@@ -214,40 +322,27 @@ export default function ArticleClient({ article, lang }: { article: Article; lan
       </header>
 
       <main className="max-w-3xl mx-auto px-4 py-8">
-        {/* Hero Image */}
         {article.image && (
-          <img
-            src={article.image}
-            alt={article.title}
-            className="w-full h-64 object-cover rounded-2xl mb-6 shadow-sm"
-          />
+          <img src={article.image} alt={article.title} className="w-full h-64 object-cover rounded-2xl mb-6 shadow-sm" />
         )}
 
-        {/* Date + Tags + Visit count */}
         <div className="flex items-center gap-2 mb-3 flex-wrap">
           <span className="text-sm text-gray-400">{article.date}</span>
           {visitCount !== null && (
-            <span className="text-xs text-gray-400 flex items-center gap-1">
-              👁️ {visitCount.toLocaleString()} views
-            </span>
+            <span className="text-xs text-gray-400 flex items-center gap-1">👁️ {visitCount.toLocaleString()} views</span>
           )}
           {article.tags?.map((tag: string) => (
-            <span key={tag} className="text-xs bg-blue-50 text-blue-600 px-2 py-0.5 rounded-full">
-              #{tag}
-            </span>
+            <span key={tag} className="text-xs bg-blue-50 text-blue-600 px-2 py-0.5 rounded-full">#{tag}</span>
           ))}
         </div>
 
-        {/* Title */}
         <h1 className="text-3xl font-bold text-gray-900 mb-4 leading-tight">{article.title}</h1>
 
-        {/* Summary box — NO author row here */}
         <div className="bg-blue-50 border-l-4 border-blue-500 p-4 rounded-r-xl mb-8">
           <p className="font-semibold text-blue-800 mb-1">📌 What you&apos;ll learn today</p>
           <p className="text-blue-700 text-sm leading-relaxed">{article.summary}</p>
         </div>
 
-        {/* Article Content */}
         <div
           className="mb-8 text-gray-700
             [&_h2]:text-xl [&_h2]:font-bold [&_h2]:text-gray-800 [&_h2]:mt-8 [&_h2]:mb-3
@@ -259,47 +354,6 @@ export default function ArticleClient({ article, lang }: { article: Article; lan
           dangerouslySetInnerHTML={{ __html: displayContent }}
         />
 
-        {/* About the Author — BEFORE Real-World Example */}
-        <div className="mb-8 p-6 bg-white rounded-2xl border border-gray-100 shadow-sm">
-          <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-4">About the Author</p>
-          <div className="flex items-start gap-4">
-            <img
-              src="/images/profile.png"
-              alt="Gnanamuthu G"
-              className="w-16 h-16 rounded-full object-cover border-2 border-blue-100 flex-shrink-0"
-            />
-            <div>
-              <p className="font-bold text-gray-900 text-base">Gnanamuthu G</p>
-              <p className="text-gray-500 text-sm mt-1 leading-relaxed">
-                AI &amp; Contact Center specialist with hands-on expertise in Google CCAIP, Dialogflow CX, and Conversational AI.
-                Passionate about helping teams build intelligent customer experiences and crack the CCAIP certification.
-              </p>
-              <div className="flex items-center gap-4 mt-3 flex-wrap">
-                <a href="https://www.linkedin.com/in/gnanamuthugm" target="_blank" rel="noopener noreferrer"
-                  className="text-sm text-blue-600 hover:underline font-medium">💼 LinkedIn</a>
-                <a href="https://gnanamuthugm.github.io/portfolio/" target="_blank" rel="noopener noreferrer"
-                  className="text-sm text-gray-600 hover:underline font-medium">🌐 Portfolio</a>
-                <a href="https://github.com/gnanamuthugm" target="_blank" rel="noopener noreferrer"
-                  className="text-sm text-gray-600 hover:underline font-medium">🐙 GitHub</a>
-                <button
-                  onClick={() => downloadArticle(article)}
-                  className="text-sm text-green-600 hover:underline font-medium flex items-center gap-1"
-                >
-                  � Download Text
-                </button>
-                <button
-                  onClick={() => downloadArticleAsPDF(article)}
-                  data-pdf-download
-                  className="text-sm text-red-600 hover:underline font-medium flex items-center gap-1"
-                >
-                  📋 Download PDF
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* Key Takeaways */}
         {article.keyPoints?.length > 0 && (
           <div className="bg-yellow-50 border border-yellow-200 p-5 rounded-2xl mb-8">
             <h3 className="font-bold text-yellow-800 mb-3">⭐ Key Takeaways</h3>
@@ -314,7 +368,32 @@ export default function ArticleClient({ article, lang }: { article: Article; lan
           </div>
         )}
 
-        {/* Real-World Example — AFTER About the Author */}
+        {/* About Author BEFORE Real-World */}
+        <div className="mb-8 p-6 bg-white rounded-2xl border border-gray-100 shadow-sm">
+          <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-4">About the Author</p>
+          <div className="flex items-start gap-4">
+            <img src="/images/profile.png" alt="Gnanamuthu G" className="w-16 h-16 rounded-full object-cover border-2 border-blue-100 flex-shrink-0" />
+            <div>
+              <p className="font-bold text-gray-900 text-base">Gnanamuthu G</p>
+              <p className="text-gray-500 text-sm mt-1 leading-relaxed">
+                AI &amp; Contact Center specialist with expertise in Google CCAIP, Dialogflow CX, and Conversational AI.
+              </p>
+              <div className="flex items-center gap-4 mt-3 flex-wrap">
+                <a href="https://www.linkedin.com/in/gnanamuthugm" target="_blank" rel="noopener noreferrer" className="text-sm text-blue-600 hover:underline font-medium">💼 LinkedIn</a>
+                <a href="https://gnanamuthugm.github.io/portfolio/" target="_blank" rel="noopener noreferrer" className="text-sm text-gray-600 hover:underline font-medium">🌐 Portfolio</a>
+                <a href="https://github.com/gnanamuthugm" target="_blank" rel="noopener noreferrer" className="text-sm text-gray-600 hover:underline font-medium">🐙 GitHub</a>
+                <button
+                  onClick={() => downloadArticlePDF(article)}
+                  className="text-sm text-green-600 hover:underline font-medium flex items-center gap-1"
+                >
+                  📥 Download Article
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Real-World Example AFTER About Author */}
         {article.realWorldExample && (
           <div className="bg-green-50 border border-green-200 p-5 rounded-2xl mb-8">
             <h3 className="font-bold text-green-800 mb-2">🌍 Real-World Example</h3>
@@ -322,10 +401,7 @@ export default function ArticleClient({ article, lang }: { article: Article; lan
           </div>
         )}
 
-        {/* Quiz */}
         <QuizSection questions={article.quiz || []} />
-
-        {/* Comments */}
         <CommentsSection articleSlug={article.slug} />
       </main>
 
