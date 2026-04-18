@@ -33,12 +33,8 @@ function getCategoryStyle(color: string) {
   return styles[color] || "bg-gray-100 text-gray-700";
 }
 
-// ── PDF Download — proper format with image + quiz ──────────
-async function downloadArticlePDF(article: Article) {
-  // Build clean HTML for PDF
-  const stripHtml = (html: string) =>
-    html.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
-
+// ── PDF Download ─────────────────────────────────────────────
+function downloadArticlePDF(article: Article) {
   const quizHtml = article.quiz?.length
     ? article.quiz.map((q: any, i: number) => `
         <div style="margin-bottom:20px;padding:14px 16px;background:#f8f9ff;border-left:4px solid #3b82f6;border-radius:6px;">
@@ -49,229 +45,254 @@ async function downloadArticlePDF(article: Article) {
               ${opt.startsWith(q.answer) ? '✓ ' : ''}${opt}
             </p>`).join('')}
         </div>`).join('')
-    : '<p style="color:#6b7280;font-size:13px;">No quiz questions available.</p>';
+    : '';
 
   const keyPointsHtml = article.keyPoints?.length
     ? article.keyPoints.map(p => `
-        <div style="display:flex;gap:10px;margin-bottom:8px;align-items:flex-start;">
-          <span style="color:#d97706;font-weight:700;flex-shrink:0;">✓</span>
-          <span style="font-size:13px;color:#92400e;">${p}</span>
+        <div style="display:flex;gap:10px;margin-bottom:10px;align-items:flex-start;">
+          <span style="color:#d97706;font-weight:700;flex-shrink:0;margin-top:1px;">✓</span>
+          <span style="font-size:13px;color:#92400e;line-height:1.6;">${p}</span>
         </div>`).join('')
     : '';
 
-  const contentText = article.content
-    .replace(/<h2[^>]*>(.*?)<\/h2>/gi, (_, t) => `<h2 style="font-size:18px;font-weight:700;color:#1e3a8a;margin:28px 0 10px;border-bottom:2px solid #dbeafe;padding-bottom:6px;">${t}</h2>`)
-    .replace(/<h3[^>]*>(.*?)<\/h3>/gi, (_, t) => `<h3 style="font-size:15px;font-weight:700;color:#1d4ed8;margin:22px 0 8px;">${t}</h3>`)
-    .replace(/<h4[^>]*>(.*?)<\/h4>/gi, (_, t) => `<h4 style="font-size:14px;font-weight:600;color:#2563eb;margin:18px 0 6px;">${t}</h4>`)
-    .replace(/<p[^>]*>(.*?)<\/p>/gi, (_, t) => `<p style="margin:0 0 14px;line-height:1.8;font-size:13px;color:#374151;">${t}</p>`)
-    .replace(/<ul[^>]*>(.*?)<\/ul>/gis, (_, t) => `<ul style="margin:0 0 14px;padding-left:20px;">${t}</ul>`)
-    .replace(/<ol[^>]*>(.*?)<\/ol>/gis, (_, t) => `<ol style="margin:0 0 14px;padding-left:20px;">${t}</ol>`)
-    .replace(/<li[^>]*>(.*?)<\/li>/gi, (_, t) => `<li style="margin-bottom:6px;font-size:13px;color:#374151;">${t}</li>`)
-    .replace(/<strong[^>]*>(.*?)<\/strong>/gi, '<strong style="font-weight:700;color:#111827;">$1</strong>')
-    .replace(/<code[^>]*>(.*?)<\/code>/gi, '<code style="background:#f3f4f6;padding:1px 5px;border-radius:3px;font-size:12px;font-family:monospace;">$1</code>')
-    .replace(/<blockquote[^>]*>(.*?)<\/blockquote>/gis, (_, t) => `<blockquote style="border-left:4px solid #93c5fd;padding:10px 16px;margin:16px 0;background:#eff6ff;border-radius:4px;">${t}</blockquote>`)
-    .replace(/<[^>]+>/g, '');
+  // Process HTML content — no gis flag (use gi only)
+  let contentHtml = article.content;
+  contentHtml = contentHtml.replace(/<h2([^>]*)>([\s\S]*?)<\/h2>/gi,
+    (_: string, _a: string, t: string) => `<h2 style="font-size:18px;font-weight:700;color:#1e3a8a;margin:32px 0 12px;padding-bottom:6px;border-bottom:2px solid #dbeafe;">${t}</h2>`);
+  contentHtml = contentHtml.replace(/<h3([^>]*)>([\s\S]*?)<\/h3>/gi,
+    (_: string, _a: string, t: string) => `<h3 style="font-size:15px;font-weight:700;color:#1d4ed8;margin:24px 0 8px;">${t}</h3>`);
+  contentHtml = contentHtml.replace(/<h4([^>]*)>([\s\S]*?)<\/h4>/gi,
+    (_: string, _a: string, t: string) => `<h4 style="font-size:14px;font-weight:600;color:#2563eb;margin:18px 0 6px;">${t}</h4>`);
+  contentHtml = contentHtml.replace(/<p([^>]*)>([\s\S]*?)<\/p>/gi,
+    (_: string, _a: string, t: string) => `<p style="margin:0 0 16px;line-height:1.8;font-size:13px;color:#374151;">${t}</p>`);
+  contentHtml = contentHtml.replace(/<li([^>]*)>([\s\S]*?)<\/li>/gi,
+    (_: string, _a: string, t: string) => `<li style="margin-bottom:7px;font-size:13px;color:#374151;line-height:1.7;">${t}</li>`);
+  contentHtml = contentHtml.replace(/<ul([^>]*)>/gi, '<ul style="margin:0 0 16px;padding-left:22px;">');
+  contentHtml = contentHtml.replace(/<ol([^>]*)>/gi, '<ol style="margin:0 0 16px;padding-left:22px;">');
+  contentHtml = contentHtml.replace(/<strong([^>]*)>([\s\S]*?)<\/strong>/gi,
+    (_: string, _a: string, t: string) => `<strong style="font-weight:700;color:#111827;">${t}</strong>`);
+  contentHtml = contentHtml.replace(/<blockquote([^>]*)>([\s\S]*?)<\/blockquote>/gi,
+    (_: string, _a: string, t: string) => `<blockquote style="border-left:4px solid #93c5fd;padding:10px 16px;margin:16px 0;background:#eff6ff;border-radius:4px;">${t}</blockquote>`);
+  contentHtml = contentHtml.replace(/<code([^>]*)>([\s\S]*?)<\/code>/gi,
+    (_: string, _a: string, t: string) => `<code style="background:#f3f4f6;padding:1px 6px;border-radius:3px;font-size:12px;font-family:monospace;color:#dc2626;">${t}</code>`);
 
-  const html = `
-<!DOCTYPE html>
+  const html = `<!DOCTYPE html>
 <html>
 <head>
 <meta charset="UTF-8">
+<title>${article.title}</title>
 <style>
-  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap');
-  * { box-sizing: border-box; }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
   body {
-    font-family: 'Inter', Arial, sans-serif;
-    margin: 0;
-    padding: 0;
+    font-family: Arial, sans-serif;
     color: #111827;
     background: white;
   }
   .page {
-    width: 794px;
-    padding: 48px 56px;
+    width: 210mm;
+    min-height: 297mm;
+    padding: 18mm 20mm 18mm 20mm;
     background: white;
   }
-  .header-bar {
+  /* First page header — only on first page */
+  .first-header {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    margin-bottom: 8px;
+    margin-bottom: 6px;
+    padding-bottom: 10px;
+    border-bottom: 1px solid #e5e7eb;
   }
   .category-badge {
     background: #dbeafe;
     color: #1e40af;
     font-size: 11px;
-    font-weight: 600;
-    padding: 4px 10px;
+    font-weight: 700;
+    padding: 3px 10px;
     border-radius: 100px;
+    display: inline-block;
   }
-  .date {
+  .date-text {
     font-size: 11px;
     color: #9ca3af;
   }
   h1 {
-    font-size: 26px;
+    font-size: 24px;
     font-weight: 700;
     color: #111827;
     line-height: 1.3;
-    margin: 16px 0 8px;
+    margin: 14px 0 8px;
   }
-  .summary-box {
-    background: #eff6ff;
-    border-left: 4px solid #3b82f6;
-    padding: 14px 18px;
-    border-radius: 0 8px 8px 0;
-    margin: 20px 0 24px;
-  }
-  .summary-box .label {
-    font-size: 12px;
-    font-weight: 700;
-    color: #1d4ed8;
-    margin-bottom: 4px;
-  }
-  .summary-box p {
-    font-size: 13px;
-    color: #1e40af;
-    margin: 0;
-    line-height: 1.6;
-  }
-  .feature-image {
-    width: 100%;
-    height: 220px;
-    object-fit: cover;
-    border-radius: 10px;
-    margin-bottom: 28px;
-  }
-  .content { margin-bottom: 28px; }
-  .section-box {
-    border-radius: 8px;
-    padding: 18px 20px;
-    margin-bottom: 20px;
-  }
-  .section-title {
-    font-size: 15px;
-    font-weight: 700;
-    margin: 0 0 14px;
-  }
-  .rwe-box { background: #f0fdf4; border: 1px solid #bbf7d0; }
-  .rwe-box .section-title { color: #166534; }
-  .rwe-box p { font-size: 13px; color: #14532d; margin: 0; line-height: 1.7; }
-  .key-box { background: #fffbeb; border: 1px solid #fde68a; }
-  .key-box .section-title { color: #92400e; }
-  .quiz-box { background: #f9fafb; border: 1px solid #e5e7eb; }
-  .quiz-box .section-title { color: #1e3a8a; }
-  .divider {
-    border: none;
-    border-top: 1px solid #e5e7eb;
-    margin: 28px 0;
-  }
-  .footer {
-    margin-top: 32px;
-    padding-top: 16px;
-    border-top: 2px solid #dbeafe;
+  .tags {
     display: flex;
-    justify-content: space-between;
-    align-items: center;
+    gap: 5px;
     flex-wrap: wrap;
-    gap: 8px;
+    margin: 8px 0 14px;
   }
-  .footer .author { font-size: 12px; font-weight: 600; color: #1d4ed8; }
-  .footer .links { font-size: 11px; color: #6b7280; }
-  .footer a { color: #2563eb; text-decoration: none; margin-left: 8px; }
-  .tags { display: flex; gap: 6px; flex-wrap: wrap; margin: 12px 0 0; }
   .tag {
     background: #eff6ff;
     color: #1d4ed8;
     font-size: 10px;
-    padding: 2px 8px;
+    padding: 2px 7px;
     border-radius: 100px;
     font-weight: 500;
+  }
+  .summary-box {
+    background: #eff6ff;
+    border-left: 4px solid #3b82f6;
+    padding: 12px 16px;
+    border-radius: 0 8px 8px 0;
+    margin: 0 0 20px;
+  }
+  .summary-label {
+    font-size: 11px;
+    font-weight: 700;
+    color: #1d4ed8;
+    margin-bottom: 4px;
+  }
+  .summary-text {
+    font-size: 13px;
+    color: #1e40af;
+    line-height: 1.6;
+  }
+  .feature-img {
+    width: 100%;
+    height: 200px;
+    object-fit: cover;
+    border-radius: 8px;
+    margin-bottom: 24px;
+    display: block;
+  }
+  .content-body {
+    margin-bottom: 24px;
+  }
+  .divider {
+    border: none;
+    border-top: 1px solid #e5e7eb;
+    margin: 24px 0;
+  }
+  .section-box {
+    border-radius: 8px;
+    padding: 16px 18px;
+    margin-bottom: 18px;
+  }
+  .section-title {
+    font-size: 14px;
+    font-weight: 700;
+    margin: 0 0 12px;
+  }
+  .rwe { background: #f0fdf4; border: 1px solid #bbf7d0; }
+  .rwe .section-title { color: #166534; }
+  .rwe p { font-size: 13px; color: #14532d; line-height: 1.7; margin: 0; }
+  .key { background: #fffbeb; border: 1px solid #fde68a; }
+  .key .section-title { color: #92400e; }
+  .quiz { background: #f9fafb; border: 1px solid #e5e7eb; }
+  .quiz .section-title { color: #1e3a8a; }
+  /* Footer — only on last page */
+  .footer {
+    margin-top: 32px;
+    padding-top: 14px;
+    border-top: 2px solid #dbeafe;
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+  .footer-author { font-size: 12px; font-weight: 700; color: #1d4ed8; }
+  .footer-links { font-size: 11px; color: #6b7280; margin-top: 3px; }
+  .footer-links a { color: #2563eb; text-decoration: none; margin-right: 10px; }
+  @media print {
+    body { margin: 0; }
+    .page { padding: 15mm 18mm; }
+    @page { margin: 0; size: A4; }
   }
 </style>
 </head>
 <body>
 <div class="page">
-  <!-- Header -->
-  <div class="header-bar">
+  <!-- First page header only -->
+  <div class="first-header">
     <span class="category-badge">${article.categoryEmoji} ${article.categoryName}</span>
-    <span class="date">${article.date}</span>
+    <span class="date-text">${article.date}</span>
   </div>
 
   <h1>${article.title}</h1>
 
-  <!-- Tags -->
   <div class="tags">
-    ${article.tags?.map(t => `<span class="tag">#${t}</span>`).join('') || ''}
+    ${(article.tags || []).map((t: string) => `<span class="tag">#${t}</span>`).join('')}
   </div>
 
-  <!-- Summary -->
   <div class="summary-box">
-    <div class="label">📌 What you'll learn today</div>
-    <p>${article.summary}</p>
+    <div class="summary-label">📌 What you'll learn today</div>
+    <div class="summary-text">${article.summary}</div>
   </div>
 
-  <!-- Feature Image -->
-  <img class="feature-image" src="${article.image}" alt="${article.title}" crossorigin="anonymous" />
+  <img class="feature-img" src="${article.image}" alt="${article.title}" />
 
-  <!-- Article Content -->
-  <div class="content">
-    ${contentText}
+  <div class="content-body">
+    ${contentHtml}
   </div>
 
   <hr class="divider" />
 
-  <!-- Real-World Example -->
   ${article.realWorldExample ? `
-  <div class="section-box rwe-box">
+  <div class="section-box rwe">
     <div class="section-title">🌍 Real-World Example</div>
     <p>${article.realWorldExample}</p>
   </div>` : ''}
 
-  <!-- Key Takeaways -->
-  ${article.keyPoints?.length ? `
-  <div class="section-box key-box">
+  ${keyPointsHtml ? `
+  <div class="section-box key">
     <div class="section-title">⭐ Key Takeaways</div>
     ${keyPointsHtml}
   </div>` : ''}
 
-  <!-- Quiz Questions -->
-  ${article.quiz?.length ? `
-  <div class="section-box quiz-box">
+  ${quizHtml ? `
+  <div class="section-box quiz">
     <div class="section-title">❓ Quiz Questions</div>
     ${quizHtml}
   </div>` : ''}
 
-  <!-- Footer -->
+  <!-- Footer — no URL, just author + links -->
   <div class="footer">
     <div>
-      <div class="author">Gnanamuthu G — AI & Contact Center Expert</div>
-      <div class="links" style="margin-top:4px;">
-        Generated from Learn Daily
-        <a href="https://ai-article-publisher.vercel.app">Website</a>
-        <a href="https://www.linkedin.com/in/gnanamuthugm">LinkedIn</a>
-        <a href="https://gnanamuthugm.github.io/portfolio">Portfolio</a>
-        <a href="https://topmate.io/gnanamuthugm">Interview Questions</a>
+      <div class="footer-author">Gnanamuthu G — AI &amp; Contact Center Expert</div>
+      <div class="footer-links">
+        <a href="https://www.linkedin.com/in/gnanamuthugm">💼 LinkedIn</a>
+        <a href="https://gnanamuthugm.github.io/portfolio">🌐 Portfolio</a>
+        <a href="https://topmate.io/gnanamuthugm">📋 Interview Questions</a>
+        <a href="https://ai-article-publisher.vercel.app">🌐 Learn Daily</a>
       </div>
     </div>
-    <div class="date" style="font-size:11px;">ai-article-publisher.vercel.app</div>
   </div>
 </div>
+
+<script>
+  // Wait for image to load then print
+  window.onload = function() {
+    var img = document.querySelector('.feature-img');
+    function doPrint() {
+      setTimeout(function() { window.print(); }, 600);
+    }
+    if (img && !img.complete) {
+      img.onload = doPrint;
+      img.onerror = doPrint;
+    } else {
+      doPrint();
+    }
+  };
+</script>
 </body>
 </html>`;
 
-  // Open in new tab and trigger print as PDF
   const printWindow = window.open('', '_blank');
-  if (!printWindow) return;
+  if (!printWindow) {
+    alert('Pop-up blocked. Please allow pop-ups and try again.');
+    return;
+  }
   printWindow.document.write(html);
   printWindow.document.close();
-
-  // Wait for image to load then print
-  printWindow.onload = () => {
-    setTimeout(() => {
-      printWindow.print();
-    }, 800);
-  };
 }
 
 export default function ArticleClient({ article, lang }: { article: Article; lang: string }) {
@@ -279,8 +300,8 @@ export default function ArticleClient({ article, lang }: { article: Article; lan
   const [currentLang, setCurrentLang] = useState("en");
   const [visitCount, setVisitCount] = useState<number | null>(null);
 
-  function handleTranslated(lang: string, translated: string) {
-    setCurrentLang(lang);
+  function handleTranslated(l: string, translated: string) {
+    setCurrentLang(l);
     setDisplayContent(translated);
   }
 
@@ -294,7 +315,7 @@ export default function ArticleClient({ article, lang }: { article: Article; lan
         await supabase.rpc('increment_article_views', { article_slug: article.slug });
         const { data } = await supabase.from('article_views').select('view_count').eq('article_id', article.slug).single();
         if (data) setVisitCount(data.view_count);
-      } catch (e) {}
+      } catch (_e) {}
     }
     trackVisit();
   }, [article.slug]);
@@ -368,7 +389,7 @@ export default function ArticleClient({ article, lang }: { article: Article; lan
           </div>
         )}
 
-        {/* About Author BEFORE Real-World */}
+        {/* About Author */}
         <div className="mb-8 p-6 bg-white rounded-2xl border border-gray-100 shadow-sm">
           <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-4">About the Author</p>
           <div className="flex items-start gap-4">
@@ -393,7 +414,7 @@ export default function ArticleClient({ article, lang }: { article: Article; lan
           </div>
         </div>
 
-        {/* Real-World Example AFTER About Author */}
+        {/* Real-World Example */}
         {article.realWorldExample && (
           <div className="bg-green-50 border border-green-200 p-5 rounded-2xl mb-8">
             <h3 className="font-bold text-green-800 mb-2">🌍 Real-World Example</h3>
