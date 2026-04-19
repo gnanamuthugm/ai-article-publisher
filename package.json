@@ -9,7 +9,8 @@
     "lint": "eslint",
     "generate:daily": "node scripts/generate-daily-blog.js",
     "post:linkedin": "node scripts/post-to-linkedin.js",
-    "publish:all": "node scripts/generate-daily-blog.js && node scripts/post-to-linkedin.js"
+    "publish:all": "node scripts/generate-daily-blog.js && node scripts/post-to-linkedin.js",
+    "db:backfill": "node scripts/backfill-db.js"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.88.0",

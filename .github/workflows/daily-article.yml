@@ -6,6 +6,11 @@ on:
     # Script itself handles alternate-day logic (post → skip → post → skip)
   workflow_dispatch:        # Manual trigger when needed
 
+# Prevent duplicate runs on the same day
+concurrency:
+  group: daily-publish-${{ github.run_id }}
+  cancel-in-progress: false
+
 jobs:
   publish:
     runs-on: ubuntu-latest
@@ -39,7 +44,7 @@ jobs:
         run: |
           git config user.name "CCAIP Daily Bot"
           git config user.email "bot@ccaip-daily.com"
-          git add data/articles.json content/articles/ || true
+          git add data/articles.json data/publish-state.json content/articles/ || true
           git diff --staged --quiet || git commit -m "📚 article: $(date +'%Y-%m-%d')"
           git push origin main
 

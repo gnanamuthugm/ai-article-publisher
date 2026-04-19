@@ -52,8 +52,11 @@ create table if not exists linkedin_posts (
   post_text        text        not null,
   article_url      text,
   linkedin_post_id text,
+  has_image        boolean     default false,
   posted_at        timestamptz default now()
 );
+-- If table already exists, add the column safely:
+alter table linkedin_posts add column if not exists has_image boolean default false;
 create index if not exists idx_linkedin_article_id on linkedin_posts(article_id);
 create index if not exists idx_linkedin_posted_at  on linkedin_posts(posted_at desc);
 alter table linkedin_posts enable row level security;

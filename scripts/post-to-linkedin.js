@@ -14,24 +14,40 @@ const LINKEDIN_PERSON_URN = process.env.LINKEDIN_PERSON_URN;
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const SUPABASE_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
-async function supabaseInsert(table, record) {
-  if (!SUPABASE_URL || !SUPABASE_KEY) return;
-  try {
-    const res = await fetch(`${SUPABASE_URL}/rest/v1/${table}`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'apikey': SUPABASE_KEY,
-        'Authorization': `Bearer ${SUPABASE_KEY}`,
-        'Prefer': 'return=minimal',
-      },
-      body: JSON.stringify(record),
-    });
-    if (res.ok) console.log(`✅ Supabase [${table}] saved`);
-    else console.warn(`⚠️  Supabase [${table}]:`, await res.text());
-  } catch (e) {
-    console.warn(`⚠️  Supabase [${table}]:`, e.message);
+async function supabaseInsert(table, record, retries = 3) {
+  if (!SUPABASE_URL || !SUPABASE_KEY) return false;
+  for (let attempt = 1; attempt <= retries; attempt++) {
+    try {
+      const res = await fetch(`${SUPABASE_URL}/rest/v1/${table}`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'apikey':        SUPABASE_KEY,
+          'Authorization': `Bearer ${SUPABASE_KEY}`,
+          'Prefer':        'resolution=ignore-duplicates,return=minimal',
+        },
+        body: JSON.stringify(record),
+      });
+      if (res.ok) { console.log(`✅ Supabase [${table}] saved`); return true; }
+      const errText = await res.text();
+      console.warn(`⚠️  Supabase [${table}] attempt ${attempt} failed (${res.status}): ${errText}`);
+      if (attempt < retries) await new Promise(r => setTimeout(r, attempt * 2000));
+    } catch (e) {
+      console.warn(`⚠️  Supabase [${table}] attempt ${attempt} error: ${e.message}`);
+      if (attempt < retries) await new Promise(r => setTimeout(r, attempt * 2000));
+    }
   }
+  console.error(`❌  Supabase [${table}] FAILED after ${retries} attempts — data NOT stored in DB!`);
+  return false;
+}
+
+function buildFallbackTeaser(article) {
+  const hook = `Do you really understand ${article.title}?`;
+  const insight = article.summary || 'A key concept every Contact Center & AI practitioner should know.';
+  const keyPoint = article.keyPoints?.[0] ? `\n💡 ${article.keyPoints[0]}` : '';
+  const tags = (article.tags || ['CCAIP', 'DialogflowCX', 'ConversationalAI'])
+    .slice(0, 4).map(t => `#${t.replace(/\s+/g, '')}`).join(' ');
+  return `${hook}\n\n${insight}${keyPoint}\n\nRead today's article 👇\n\n${tags}`;
 }
 
 async function generateLinkedInTeaser(article) {
@@ -72,10 +88,17 @@ Return ONLY the post text.`;
   }
 }
 
+// IST date helper — GitHub Actions UTC-ல் run ஆகுது, IST use பண்ணணும்
+function getISTDate() {
+  const ist = new Date(Date.now() + 5.5 * 60 * 60 * 1000);
+  return ist.toISOString().split('T')[0];
+}
+
 function getTodaysArticle() {
-  const today = new Date().toISOString().split('T')[0];
+  const today = getISTDate();
   try {
     const articles = JSON.parse(fs.readFileSync(ARTICLES_PATH, 'utf8'));
+    // First try exact today match, fallback to most recent article
     return articles.find(a => a.date === today) || articles[0];
   } catch { return null; }
 }
@@ -208,7 +231,7 @@ async function main() {
     return;
   }
 
-  const today = new Date().toISOString().split('T')[0];
+  const today = getISTDate();
   console.log(`📅 ${today} | 📌 "${article.title}"`);
 
   const log = loadPostLog();
@@ -220,11 +243,12 @@ async function main() {
   let teaserText;
   try {
     teaserText = await generateLinkedInTeaser(article);
-    console.log('\n✅ Teaser:\n' + teaserText);
+    console.log('\n✅ Teaser (Gemini):\n' + teaserText);
   } catch (err) {
-    console.log(`⚠️  Teaser failed: ${err.message.substring(0, 100)}`);
-    console.log('⏭️  Skipping LinkedIn post today.');
-    return;
+    console.log(`⚠️  Gemini teaser failed: ${err.message.substring(0, 100)}`);
+    console.log('🔄 Using fallback teaser from article summary...');
+    teaserText = buildFallbackTeaser(article);
+    console.log('\n✅ Teaser (fallback):\n' + teaserText);
   }
 
   const articleUrl = `${BLOG_BASE_URL}/en/blog/${article.slug}`;
@@ -270,12 +294,13 @@ async function main() {
   savePostLog(log);
 
   await supabaseInsert('linkedin_posts', {
-    article_id: article.slug,
-    article_title: article.title,
-    post_text: teaserText,
-    article_url: articleUrl,
+    article_id:       article.slug,
+    article_title:    article.title,
+    post_text:        teaserText,
+    article_url:      articleUrl,
     linkedin_post_id: result.id || null,
-    posted_at: new Date().toISOString(),
+    has_image:        !!imageUrn,
+    posted_at:        new Date().toISOString(),
   });
 
   if (result.simulated) {

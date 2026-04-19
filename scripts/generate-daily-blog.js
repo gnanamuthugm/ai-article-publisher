@@ -1,4 +1,5 @@
-const fs = require('fs');
+'use strict';
+const fs   = require('fs');
 const path = require('path');
 const { GoogleGenAI } = require('@google/genai');
 require('dotenv').config({ path: '.env.local' });
@@ -7,8 +8,16 @@ require('dotenv').config({ path: '.env.local' });
 // CCAIP Daily Blog Generator — Production
 // Model       : gemini-2.0-flash (stable, 1500 RPD free)
 // Schedule    : Alternate days — post → skip → post → skip
-// Retry       : max 2 attempts, 65s wait
-// Safety      : graceful skip on API failure
+// Retry       : exponential backoff, max 5 attempts
+// State       : persistent JSON (pendingTopics + lastPublishedIndex)
+//
+// State file example:
+// {
+//   "lastPublishedIndex": 4,
+//   "pendingTopics": [
+//     { "topic": "Dialogflow CX Analytics", "categoryId": "dialogflow-cx", "failedAt": "2026-04-19" }
+//   ]
+// }
 // ============================================================
 
 const MODEL = 'gemini-2.0-flash';
@@ -16,35 +25,115 @@ const MODEL = 'gemini-2.0-flash';
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const SUPABASE_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
-async function supabaseInsert(table, record) {
-  if (!SUPABASE_URL || !SUPABASE_KEY) {
-    console.log(`⚠️  Supabase not configured — skipping ${table}`);
-    return;
-  }
+// ── State file path ──────────────────────────────────────────
+const STATE_PATH = path.join(process.cwd(), 'data', 'publish-state.json');
+
+/** @typedef {{ lastPublishedIndex: number, pendingTopics: Array<{topic:string,categoryId:string,failedAt:string}> }} PublishState */
+
+/** Read persistent state from disk. Returns default if missing. */
+function readState() {
   try {
-    const res = await fetch(`${SUPABASE_URL}/rest/v1/${table}`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'apikey': SUPABASE_KEY,
-        'Authorization': `Bearer ${SUPABASE_KEY}`,
-        'Prefer': 'return=minimal',
-      },
-      body: JSON.stringify(record),
-    });
-    if (res.ok) console.log(`✅ Supabase [${table}] saved`);
-    else console.warn(`⚠️  Supabase [${table}]:`, await res.text());
-  } catch (e) {
-    console.warn(`⚠️  Supabase [${table}]:`, e.message);
+    return JSON.parse(fs.readFileSync(STATE_PATH, 'utf8'));
+  } catch {
+    return { lastPublishedIndex: -1, pendingTopics: [] };
   }
 }
 
+/** Write state back to disk atomically (write-then-rename). */
+function writeState(state) {
+  const dir = path.dirname(STATE_PATH);
+  if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+  const tmp = STATE_PATH + '.tmp';
+  fs.writeFileSync(tmp, JSON.stringify(state, null, 2), 'utf8');
+  fs.renameSync(tmp, STATE_PATH);
+  console.log(`💾 State saved — lastIndex=${state.lastPublishedIndex}, pending=${state.pendingTopics.length}`);
+}
+
+// ── Retry helpers ────────────────────────────────────────────
+
+/** Sleep for `ms` milliseconds. */
+const sleep = (ms) => new Promise(r => setTimeout(r, ms));
+
+/**
+ * Exponential backoff retry wrapper.
+ * Respects Retry-After header (passed via error.retryAfter seconds).
+ * @param {() => Promise<any>} fn  Async function to retry
+ * @param {number} maxAttempts     Max attempts (default 5)
+ * @returns {Promise<any>}
+ */
+async function withRetry(fn, maxAttempts = 5) {
+  let lastErr;
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    try {
+      console.log(`  [attempt ${attempt}/${maxAttempts}]`);
+      return await fn();
+    } catch (err) {
+      lastErr = err;
+      const msg = err.message || '';
+      const is429 = msg.includes('429') || err.status === 429;
+      const is503 = msg.includes('503') || err.status === 503;
+
+      if (!is429 && !is503) {
+        // Non-retriable error — fail fast
+        console.log(`  ✗ Non-retriable error: ${msg.substring(0, 120)}`);
+        throw err;
+      }
+
+      if (attempt === maxAttempts) break;
+
+      // Respect Retry-After header if API provides it
+      const retryAfterSec = err.retryAfter ? parseInt(err.retryAfter, 10) : null;
+      const backoffMs = retryAfterSec
+        ? retryAfterSec * 1000
+        : Math.min(2 ** attempt * 1000, 64000); // 2s, 4s, 8s, 16s, 32s, cap 64s
+
+      console.log(`  ⚠️  ${is429 ? '429 Rate limit' : '503 Unavailable'} — waiting ${backoffMs / 1000}s before retry...`);
+      await sleep(backoffMs);
+    }
+  }
+  throw lastErr;
+}
+
+async function supabaseInsert(table, record, retries = 3) {
+  if (!SUPABASE_URL || !SUPABASE_KEY) {
+    console.log(`⚠️  Supabase not configured — skipping ${table}`);
+    return false;
+  }
+  for (let attempt = 1; attempt <= retries; attempt++) {
+    try {
+      const res = await fetch(`${SUPABASE_URL}/rest/v1/${table}`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'apikey':        SUPABASE_KEY,
+          'Authorization': `Bearer ${SUPABASE_KEY}`,
+          'Prefer':        'resolution=ignore-duplicates,return=minimal',
+        },
+        body: JSON.stringify(record),
+      });
+      if (res.ok) {
+        console.log(`✅ Supabase [${table}] saved`);
+        return true;
+      }
+      const errText = await res.text();
+      console.warn(`⚠️  Supabase [${table}] attempt ${attempt} failed (${res.status}): ${errText}`);
+      if (attempt < retries) await new Promise(r => setTimeout(r, attempt * 2000));
+    } catch (e) {
+      console.warn(`⚠️  Supabase [${table}] attempt ${attempt} error: ${e.message}`);
+      if (attempt < retries) await new Promise(r => setTimeout(r, attempt * 2000));
+    }
+  }
+  console.error(`❌  Supabase [${table}] FAILED after ${retries} attempts — data NOT stored in DB!`);
+  return false;
+}
+
 // ── Alternate day check ──────────────────────────────────────
-// Day index from epoch: even = publish day, odd = skip day
-// This creates a reliable post → skip → post → skip loop
+// Uses IST date (UTC+5:30) so publish day matches what user sees
+// Odd dates = publish (1,3,5...), Even dates = skip
 function isPublishDay() {
-  const dayIndex = Math.floor(Date.now() / (1000 * 60 * 60 * 24));
-  return dayIndex % 2 === 0; // even days = publish
+  const istOffset = 5.5 * 60 * 60 * 1000;
+  const istNow    = new Date(Date.now() + istOffset);
+  return istNow.getUTCDate() % 2 === 1;
 }
 
 const CATEGORY_SCHEDULE = [
@@ -245,29 +334,17 @@ Return ONLY valid JSON (no markdown, no backticks):
   "tags": ["${category.id}", "contact-center", "ai"]
 }`;
 
-  for (let attempt = 1; attempt <= 2; attempt++) {
-    try {
-      console.log(`Attempt ${attempt}/2`);
-      const response = await client.models.generateContent({ model: MODEL, contents: prompt });
-      let text = response.text.trim()
-        .replace(/^```json\s*/i, '').replace(/^```\s*/i, '').replace(/```\s*$/i, '').trim();
-      try { return JSON.parse(text); }
-      catch (e) {
-        const match = text.match(/\{[\s\S]*\}/);
-        if (match) return JSON.parse(match[0]);
-        throw new Error(`JSON parse failed: ${e.message}`);
-      }
-    } catch (err) {
-      const msg = err.message || '';
-      const is429or503 = msg.includes('429') || msg.includes('503');
-      if (attempt === 1 && is429or503) {
-        console.log(`Waiting 65 seconds before retry...`);
-        await new Promise(r => setTimeout(r, 65000));
-        continue;
-      }
-      throw err;
+  return withRetry(async () => {
+    const response = await client.models.generateContent({ model: MODEL, contents: prompt });
+    let text = response.text.trim()
+      .replace(/^```json\s*/i, '').replace(/^```\s*/i, '').replace(/```\s*$/i, '').trim();
+    try { return JSON.parse(text); }
+    catch (e) {
+      const match = text.match(/\{[\s\S]*\}/);
+      if (match) return JSON.parse(match[0]);
+      throw new Error(`JSON parse failed: ${e.message}`);
     }
-  }
+  });
 }
 
 const ARTICLES_PATH = path.join(process.cwd(), 'data', 'articles.json');
@@ -286,38 +363,72 @@ function saveArticles(articles) {
 async function main() {
   console.log(`\n🚀 CCAIP Blog Generator [PRODUCTION — alternate days]\n`);
 
-  // ── Alternate day check ──
+  // ── Alternate day gate ──
   if (!isPublishDay()) {
     console.log('📅 Today is a rest day (alternate day schedule).');
     console.log('⏭️  Skipping — next publish day is tomorrow.');
     return;
   }
 
-  const now = new Date();
-  const today = now.toISOString().split('T')[0];
-  const category = getCurrentCategory();
-  const topic = getTodaysTopic(category.id);
-  const slug = `${today}-${createSlug(topic)}`;
-
-  console.log(`📅 Date     : ${today} (PUBLISH DAY ✅)`);
-  console.log(`📂 Category : ${category.name}`);
-  console.log(`📌 Topic    : "${topic}"`);
-  console.log(`🤖 Model    : ${MODEL}`);
+  const now   = new Date();
+  const today = (() => {
+    const ist = new Date(Date.now() + 5.5 * 60 * 60 * 1000);
+    return ist.toISOString().split('T')[0];
+  })();
 
   const articles = loadArticles();
 
+  // ── Duplicate guard ──
   if (articles.find(a => a.date === today)) {
     console.log('✅ Already published today. Skipping.');
     return;
   }
 
+  // ── Load persistent state ──
+  const state = readState();
+  console.log(`📂 State loaded — lastIndex=${state.lastPublishedIndex}, pending=${state.pendingTopics.length}`);
+
+  // ── Resolve topic ──
+  // Priority 1: retry first failed pending topic
+  // Priority 2: next topic by lastPublishedIndex
+  let topic, category, isRetry = false;
+
+  if (state.pendingTopics.length > 0) {
+    const pending = state.pendingTopics[0];
+    category = CATEGORY_SCHEDULE.find(c => c.id === pending.categoryId) || getCurrentCategory();
+    topic    = pending.topic;
+    isRetry  = true;
+    console.log(`🔄 Retrying failed topic: "${topic}" (failed ${pending.failedAt})`);
+  } else {
+    category = getCurrentCategory();
+    const topics    = TOPICS[category.id];
+    const nextIndex = (state.lastPublishedIndex + 1) % topics.length;
+    topic = topics[nextIndex];
+    console.log(`📅 Date     : ${today} (PUBLISH DAY ✅)`);
+    console.log(`📂 Category : ${category.name}`);
+    console.log(`📌 Topic    : "${topic}" [index ${nextIndex}]`);
+    console.log(`🤖 Model    : ${MODEL}`);
+  }
+
+  const slug = `${today}-${createSlug(topic)}`;
+
+  // ── Generate article (with exponential backoff) ──
   let data;
   try {
     data = await generateArticle(topic, category);
     console.log(`✅ Article generated: "${data.title}"`);
   } catch (err) {
-    console.log(`⚠️  Gemini API failed: ${err.message.substring(0, 120)}`);
-    console.log(`⏭️  Skipping today. Will retry on next publish day.`);
+    console.log(`⚠️  Gemini API failed after all retries: ${err.message.substring(0, 120)}`);
+
+    // Add to pendingTopics if not already there
+    const alreadyPending = state.pendingTopics.some(p => p.topic === topic);
+    if (!alreadyPending) {
+      state.pendingTopics.push({ topic, categoryId: category.id, failedAt: today });
+      writeState(state);
+      console.log(`📌 Topic saved to pendingTopics — will retry next publish day.`);
+    } else {
+      console.log(`📅 Topic already in pendingTopics — will keep retrying.`);
+    }
     return;
   }
 
@@ -338,6 +449,17 @@ async function main() {
 
   articles.unshift(article);
   saveArticles(articles);
+
+  // ── Update state on success ──
+  if (isRetry) {
+    // Remove the retried topic from pendingTopics
+    state.pendingTopics = state.pendingTopics.filter(p => p.topic !== topic);
+  } else {
+    // Advance the index
+    const topics = TOPICS[category.id];
+    state.lastPublishedIndex = (state.lastPublishedIndex + 1) % topics.length;
+  }
+  writeState(state);
 
   await supabaseInsert('articles', {
     id: slug, slug, title: data.title, date: today,
