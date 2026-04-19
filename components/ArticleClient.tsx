@@ -98,8 +98,11 @@ function downloadArticleTxt(article: Article, currentContent: string) {
   URL.revokeObjectURL(url);
 }
 
-// ── PDF Download — 10% margin every page, proper format ──────
-function downloadArticlePDF(article: Article, currentContent: string) {
+// ── PDF Download — jsPDF + html2canvas → true .pdf file ──
+async function downloadArticlePDF(article: Article, currentContent: string) {
+  const { default: jsPDF } = await import('jspdf');
+  const { default: html2canvas } = await import('html2canvas');
+
   const stripHtml = (html: string) =>
     html.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
 
@@ -250,7 +253,7 @@ function downloadArticlePDF(article: Article, currentContent: string) {
   <!-- First page header -->
   <div class="first-header">
     <span class="category-badge">${article.categoryEmoji} ${article.categoryName}</span>
-    <span class="date-text">${article.date}</span>
+    <span class="date-text">${new Date().toLocaleString('en-US', { month: 'numeric', day: 'numeric', year: '2-digit', hour: 'numeric', minute: '2-digit', hour12: true })}</span>
   </div>
 
   <h1>${article.title}</h1>
@@ -289,12 +292,7 @@ function downloadArticlePDF(article: Article, currentContent: string) {
   </div>` : ''}
 
   <div class="footer">
-    <div class="footer-author">Gnanamuthu G — AI &amp; Contact Center Expert</div>
-    <div class="footer-links">
-      <a href="https://www.linkedin.com/in/gnanamuthugm">💼 LinkedIn</a>
-      <a href="https://gnanamuthugm.github.io/portfolio">🌐 Portfolio</a>
-      <a href="https://topmate.io/gnanamuthugm">📋 Interview Questions</a>
-    </div>
+    <div class="footer-links">CCAIP Daily — Learn Daily</div>
   </div>
 
 </div>
@@ -313,19 +311,70 @@ function downloadArticlePDF(article: Article, currentContent: string) {
 </body>
 </html>`;
 
-  const printWindow = window.open('', '_blank');
-  if (!printWindow) {
-    alert('Pop-up blocked. Please allow pop-ups and try again.');
-    return;
+  // Render HTML in a hidden off-screen container
+  const container = document.createElement('div');
+  container.style.cssText = 'position:fixed;top:0;left:-9999px;width:794px;background:white;z-index:-1;';
+  container.innerHTML = html;
+  document.body.appendChild(container);
+
+  // Wait for images to load
+  const images = container.querySelectorAll('img');
+  await Promise.all(Array.from(images).map(img =>
+    img.complete ? Promise.resolve() : new Promise(res => { img.onload = res; img.onerror = res; })
+  ));
+
+  // Small delay for fonts/styles
+  await new Promise(res => setTimeout(res, 300));
+
+  const canvas = await html2canvas(container, {
+    scale: 2,
+    useCORS: true,
+    allowTaint: true,
+    backgroundColor: '#ffffff',
+    width: 794,
+    windowWidth: 794,
+  });
+
+  document.body.removeChild(container);
+
+  const imgData = canvas.toDataURL('image/jpeg', 0.95);
+  const pdf = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+
+  const pageW = pdf.internal.pageSize.getWidth();
+  const pageH = pdf.internal.pageSize.getHeight();
+  const margin = pageW * 0.10; // 10% margin
+  const printW = pageW - margin * 2;
+  const imgPxW = canvas.width;
+  const imgPxH = canvas.height;
+  const mmPerPx = printW / imgPxW;
+  const totalMmH = imgPxH * mmPerPx;
+  const printPageH = pageH - margin * 2;
+
+  let yOffset = 0;
+  let firstPage = true;
+  while (yOffset < totalMmH) {
+    if (!firstPage) pdf.addPage();
+    firstPage = false;
+    const sliceMm = Math.min(printPageH, totalMmH - yOffset);
+    const slicePxTop = yOffset / mmPerPx;
+    const slicePxH = sliceMm / mmPerPx;
+    const sliceCanvas = document.createElement('canvas');
+    sliceCanvas.width = imgPxW;
+    sliceCanvas.height = slicePxH;
+    const ctx = sliceCanvas.getContext('2d')!;
+    ctx.drawImage(canvas, 0, slicePxTop, imgPxW, slicePxH, 0, 0, imgPxW, slicePxH);
+    pdf.addImage(sliceCanvas.toDataURL('image/jpeg', 0.95), 'JPEG', margin, margin, printW, sliceMm);
+    yOffset += sliceMm;
   }
-  printWindow.document.write(html);
-  printWindow.document.close();
+
+  pdf.save(`${article.slug}.pdf`);
 }
 
 export default function ArticleClient({ article, lang }: { article: Article; lang: string }) {
   const [displayContent, setDisplayContent] = useState(article.content);
   const [currentLang, setCurrentLang] = useState("en");
   const [visitCount, setVisitCount] = useState<number | null>(null);
+  const [pdfLoading, setPdfLoading] = useState(false);
 
   function handleTranslated(l: string, translated: string) {
     setCurrentLang(l);
@@ -432,19 +481,12 @@ export default function ArticleClient({ article, lang }: { article: Article; lan
                 <a href="https://github.com/gnanamuthugm" target="_blank" rel="noopener noreferrer" className="text-sm text-gray-600 hover:underline font-medium">GitHub</a>
                 {/* Download Article — saves current language as .txt locally */}
                 <button
-                  onClick={() => downloadArticleTxt(article, displayContent)}
-                  className="text-sm text-green-600 hover:underline font-medium flex items-center gap-1"
-                  title="Download article in current language as text"
-                >
-                  Download Text
-                </button>
-                {/* Download Article as PDF */}
-                <button
-                  onClick={() => downloadArticlePDF(article, displayContent)}
-                  className="text-sm text-red-600 hover:underline font-medium flex items-center gap-1"
+                  onClick={async () => { setPdfLoading(true); await downloadArticlePDF(article, displayContent); setPdfLoading(false); }}
+                  disabled={pdfLoading}
+                  className="text-sm text-red-600 hover:underline font-medium flex items-center gap-1 disabled:opacity-50"
                   title="Download article as PDF"
                 >
-                  Download PDF
+                  {pdfLoading ? '⏳ Generating...' : 'Download PDF'}
                 </button>
               </div>
             </div>
