@@ -3,7 +3,7 @@ const path = require('path');
 const { GoogleGenAI } = require('@google/genai');
 require('dotenv').config({ path: '.env.local' });
 
-const MODEL = 'gemini-2.0-flash';
+const MODEL = 'gemini-2.5-flash-lite-preview-06-17'; // Free tier: higher quota than 2.0-flash
 
 const ARTICLES_PATH = path.join(process.cwd(), 'data', 'articles.json');
 const LINKEDIN_LOG_PATH = path.join(process.cwd(), 'data', 'linkedin-posts.json');
@@ -222,8 +222,23 @@ async function postToLinkedIn(teaserText, articleUrl, imageUrn) {
   return JSON.parse(responseText);
 }
 
+// IST date check — odd dates only (same as generate-daily-blog.js)
+function isPublishDay() {
+  const ist = new Date(Date.now() + 5.5 * 60 * 60 * 1000);
+  return ist.getUTCDate() % 2 === 1;
+}
+
 async function main() {
   console.log('\n📣 LinkedIn Auto-Post\n');
+
+  // ── Alternate day gate (must match generate-daily-blog.js) ──
+  if (!isPublishDay()) {
+    console.log('📅 Today is a rest day (even date) — skipping LinkedIn post.');
+    console.log('⏭️  Next publish day is tomorrow.');
+    return;
+  }
+
+  const today = getISTDate();
 
   const article = getTodaysArticle();
   if (!article) {
@@ -231,7 +246,12 @@ async function main() {
     return;
   }
 
-  const today = getISTDate();
+  // ── Guard: only post today's article, not fallback to articles[0] ──
+  if (article.date !== today) {
+    console.log(`⚠️  No article published today (${today}) — latest is ${article.date}. Skipping.`);
+    return;
+  }
+
   console.log(`📅 ${today} | 📌 "${article.title}"`);
 
   const log = loadPostLog();

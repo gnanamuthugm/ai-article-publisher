@@ -20,7 +20,7 @@ require('dotenv').config({ path: '.env.local' });
 // }
 // ============================================================
 
-const MODEL = 'gemini-2.0-flash';
+const MODEL = 'gemini-2.5-flash-lite-preview-06-17'; // Free tier: higher quota than 2.0-flash
 
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const SUPABASE_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
@@ -96,9 +96,11 @@ async function withRetry(fn, maxAttempts = 5) {
 
 async function supabaseInsert(table, record, retries = 3) {
   if (!SUPABASE_URL || !SUPABASE_KEY) {
-    console.log(`⚠️  Supabase not configured — skipping ${table}`);
+    console.log(`❌ Supabase NOT configured — ${table} skipped! Set NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY in GitHub Secrets.`);
     return false;
   }
+  console.log(`🔄 Supabase insert → [${table}] | id: ${record.id || record.article_id || '?'}`);
+  console.log(`   URL: ${SUPABASE_URL.substring(0, 40)}...`);
   for (let attempt = 1; attempt <= retries; attempt++) {
     try {
       const res = await fetch(`${SUPABASE_URL}/rest/v1/${table}`, {
@@ -392,6 +394,18 @@ async function main() {
   // Priority 1: retry first failed pending topic
   // Priority 2: next topic by lastPublishedIndex
   let topic, category, isRetry = false;
+
+  if (state.pendingTopics.length > 0) {
+    const pending = state.pendingTopics[0];
+    // Skip if stuck for more than 3 days — move on to next topic
+    const daysSinceFail = Math.floor((Date.now() - new Date(pending.failedAt).getTime()) / (1000*60*60*24));
+    if (daysSinceFail > 3) {
+      console.log(`⏭️  Pending topic stuck for ${daysSinceFail} days — skipping: "${pending.topic}"`);
+      state.pendingTopics.shift(); // Remove stuck topic
+      state.lastPublishedIndex = (state.lastPublishedIndex + 1) % TOPICS[getCurrentCategory().id].length;
+      writeState(state);
+    }
+  }
 
   if (state.pendingTopics.length > 0) {
     const pending = state.pendingTopics[0];
