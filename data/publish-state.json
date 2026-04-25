@@ -1,4 +1,10 @@
 {
   "lastPublishedIndex": 17,
-  "pendingTopics": []
+  "pendingTopics": [
+    {
+      "topic": "Dialogflow CX Analytics and Conversation History",
+      "categoryId": "dialogflow-cx",
+      "failedAt": "2026-04-23"
+    }
+  ]
 }
