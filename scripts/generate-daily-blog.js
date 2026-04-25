@@ -20,7 +20,7 @@ require('dotenv').config({ path: '.env.local' });
 // }
 // ============================================================
 
-const MODEL = 'gemini-2.5-flash-lite-preview-06-17'; // Free tier: higher quota than 2.0-flash
+const MODEL = 'gemini-2.5-flash-lite'; // Stable GA release (Feb 2026) — replaces preview-06-17
 
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const SUPABASE_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
