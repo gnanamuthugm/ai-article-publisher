@@ -61,10 +61,10 @@ export default async function HomePage({ params, searchParams }: HomePageProps) 
         <div className="max-w-5xl mx-auto px-4 py-14 text-center">
           <h1 className="text-4xl md:text-5xl font-bold mb-3">Learn Daily</h1>
           <p className="text-blue-100 text-lg md:text-xl mb-2">
-            One concept a day — from zero to expert in AI &amp; Contact Centers
+            Weekly three concepts — from zero to expert in AI &amp; Contact Centers
           </p>
           <p className="text-blue-200 text-sm">
-            📅 New article every day · Dialogflow CX · CCAIP · CES · Conversational AI
+            📅 New article weekly three · Dialogflow CX · CCAIP · CES · Conversational AI
           </p>
         </div>
       </section>
