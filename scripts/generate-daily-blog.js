@@ -26,7 +26,21 @@ const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const SUPABASE_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
 // ── State file path ──────────────────────────────────────────
-const STATE_PATH = path.join(process.cwd(), 'data', 'publish-state.json');
+const STATE_PATH    = path.join(process.cwd(), 'data', 'publish-state.json');
+const USED_IMGS_PATH = path.join(process.cwd(), 'data', 'used-images.json');
+
+/** Load used image URLs from disk */
+function loadUsedImages() {
+  try { return new Set(JSON.parse(fs.readFileSync(USED_IMGS_PATH, 'utf8'))); }
+  catch { return new Set(); }
+}
+
+/** Save used image URLs to disk */
+function saveUsedImages(usedSet) {
+  const dir = path.dirname(USED_IMGS_PATH);
+  if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+  fs.writeFileSync(USED_IMGS_PATH, JSON.stringify([...usedSet], null, 2), 'utf8');
+}
 
 /** @typedef {{ lastPublishedIndex: number, pendingTopics: Array<{topic:string,categoryId:string,failedAt:string}> }} PublishState */
 
@@ -295,23 +309,83 @@ function createSlug(text) {
   return text.toLowerCase().replace(/[^a-z0-9\s-]/g, '').replace(/\s+/g, '-').replace(/-+/g, '-').substring(0, 60).replace(/-$/, '');
 }
 
-async function fetchUnsplashImage(topicQuery, fallbackQuery) {
+// Topic-specific fallback images — each topic gets a unique relevant image
+const TOPIC_FALLBACK_IMAGES = {
+  // Dialogflow CX
+  'analytics':        'https://images.unsplash.com/photo-1551288049-bebda4e38f71?w=1080&auto=format&fit=crop', // data dashboard
+  'conversation':     'https://images.unsplash.com/photo-1587560699334-cc4ff634909a?w=1080&auto=format&fit=crop', // chat bubbles
+  'chatbot':          'https://images.unsplash.com/photo-1531746790731-6c087fecd65a?w=1080&auto=format&fit=crop', // robot/AI
+  'voice':            'https://images.unsplash.com/photo-1478737270239-2f02b77fc618?w=1080&auto=format&fit=crop', // microphone
+  'security':         'https://images.unsplash.com/photo-1614064641938-3bbee52942c7?w=1080&auto=format&fit=crop', // security lock
+  'integration':      'https://images.unsplash.com/photo-1558494949-ef010cbdcc31?w=1080&auto=format&fit=crop', // network connections
+  'testing':          'https://images.unsplash.com/photo-1516321318423-f06f85e504b3?w=1080&auto=format&fit=crop', // testing/debugging
+  'webhook':          'https://images.unsplash.com/photo-1555949963-ff9fe0c870eb?w=1080&auto=format&fit=crop', // code/API
+  'nlp':              'https://images.unsplash.com/photo-1620712943543-bcc4688e7485?w=1080&auto=format&fit=crop', // AI brain
+  'fallback':         'https://images.unsplash.com/photo-1573164713988-8665fc963095?w=1080&auto=format&fit=crop', // customer support
+  // Contact Center / CCAIP
+  'contact-center':   'https://images.unsplash.com/photo-1521737711867-e3b97375f902?w=1080&auto=format&fit=crop', // call center agents
+  'agent':            'https://images.unsplash.com/photo-1556761175-4b46a572b786?w=1080&auto=format&fit=crop', // headset agent
+  'routing':          'https://images.unsplash.com/photo-1519389950473-47ba0277781c?w=1080&auto=format&fit=crop', // network routing
+  'sentiment':        'https://images.unsplash.com/photo-1512314889357-e157c22f938d?w=1080&auto=format&fit=crop', // feedback emotion
+  'automation':       'https://images.unsplash.com/photo-1485827404703-89b55fcc595e?w=1080&auto=format&fit=crop', // robot automation
+  // CES / Customer Experience
+  'customer':         'https://images.unsplash.com/photo-1556742049-0cfed4f6a45d?w=1080&auto=format&fit=crop', // customer service
+  'survey':           'https://images.unsplash.com/photo-1586281380349-632531db7ed4?w=1080&auto=format&fit=crop', // survey/feedback
+  'satisfaction':     'https://images.unsplash.com/photo-1529156069898-49953e39b3ac?w=1080&auto=format&fit=crop', // happy customer
+  'dashboard':        'https://images.unsplash.com/photo-1460925895917-afdab827c52f?w=1080&auto=format&fit=crop', // analytics dashboard
+  'default':          'https://images.unsplash.com/photo-1499750310107-5fef28a66643?w=1080&auto=format&fit=crop', // generic tech workspace
+};
+
+/** Pick a topic-specific fallback image based on keywords in the query */
+function getTopicFallback(topicQuery) {
+  const q = (topicQuery || '').toLowerCase();
+  for (const [keyword, url] of Object.entries(TOPIC_FALLBACK_IMAGES)) {
+    if (keyword !== 'default' && q.includes(keyword)) return url;
+  }
+  // Secondary pass — match partial words
+  if (q.includes('analyt') || q.includes('history') || q.includes('insight')) return TOPIC_FALLBACK_IMAGES['analytics'];
+  if (q.includes('chat') || q.includes('dialog') || q.includes('intent')) return TOPIC_FALLBACK_IMAGES['conversation'];
+  if (q.includes('voice') || q.includes('speech') || q.includes('ivr') || q.includes('telephon')) return TOPIC_FALLBACK_IMAGES['voice'];
+  if (q.includes('secure') || q.includes('access') || q.includes('auth') || q.includes('privacy')) return TOPIC_FALLBACK_IMAGES['security'];
+  if (q.includes('webhook') || q.includes('api') || q.includes('integrat') || q.includes('code')) return TOPIC_FALLBACK_IMAGES['webhook'];
+  if (q.includes('test') || q.includes('debug') || q.includes('qa')) return TOPIC_FALLBACK_IMAGES['testing'];
+  if (q.includes('agent') || q.includes('headset') || q.includes('support')) return TOPIC_FALLBACK_IMAGES['agent'];
+  if (q.includes('sentiment') || q.includes('emotion') || q.includes('feeling')) return TOPIC_FALLBACK_IMAGES['sentiment'];
+  if (q.includes('automat') || q.includes('bot') || q.includes('robot') || q.includes('ai')) return TOPIC_FALLBACK_IMAGES['automation'];
+  if (q.includes('customer') || q.includes('satisfaction') || q.includes('effort') || q.includes('ces')) return TOPIC_FALLBACK_IMAGES['customer'];
+  if (q.includes('contact center') || q.includes('ccaip') || q.includes('call center')) return TOPIC_FALLBACK_IMAGES['contact-center'];
+  return TOPIC_FALLBACK_IMAGES['default'];
+}
+
+async function fetchUnsplashImage(topicQuery, fallbackQuery, usedImages) {
   const key = process.env.UNSPLASH_ACCESS_KEY;
-  const fallback = 'https://images.unsplash.com/photo-1553877522-43269d4ea984?w=1080&auto=format&fit=crop';
-  if (!key || key.startsWith('your-')) return fallback;
-  for (const q of [topicQuery, fallbackQuery, 'contact center technology']) {
+
+  // No API key — use topic-specific fallback (skip if already used)
+  if (!key || key.startsWith('your-')) {
+    const fallbacks = Object.values(TOPIC_FALLBACK_IMAGES).filter(url => !usedImages.has(url));
+    const preferred = getTopicFallback(topicQuery);
+    const img = !usedImages.has(preferred) ? preferred : (fallbacks[0] || preferred);
+    console.log(`🖼️  No Unsplash key — topic fallback: "${topicQuery}"`);
+    return img;
+  }
+
+  // With Unsplash API — fetch more results and skip already-used images
+  for (const q of [topicQuery, fallbackQuery, 'contact center AI technology', 'artificial intelligence business']) {
     try {
-      const res = await fetch(`https://api.unsplash.com/search/photos?query=${encodeURIComponent(q)}&per_page=5&orientation=landscape&client_id=${key}`);
+      const res = await fetch(`https://api.unsplash.com/search/photos?query=${encodeURIComponent(q)}&per_page=20&orientation=landscape&client_id=${key}`);
       if (!res.ok) continue;
       const data = await res.json();
       if (data.results?.length > 0) {
-        const pick = data.results[Math.floor(Math.random() * Math.min(3, data.results.length))];
-        console.log(`🖼️  Image query: "${q}"`);
+        // Filter out images already used in previous articles
+        const fresh = data.results.filter(r => !usedImages.has(r.urls.regular));
+        const pool  = fresh.length > 0 ? fresh : data.results; // fallback to all if all used
+        const pick  = pool[Math.floor(Math.random() * Math.min(5, pool.length))];
+        console.log(`🖼️  Unsplash query: "${q}" | fresh: ${fresh.length}/${data.results.length}`);
         return pick.urls.regular;
       }
     } catch (e) { console.warn(`⚠️ Unsplash:`, e.message); }
   }
-  return fallback;
+  return getTopicFallback(topicQuery);
 }
 
 async function generateArticle(topic, category) {
@@ -380,9 +454,9 @@ async function main() {
 
   const articles = loadArticles();
 
-  // ── Duplicate guard ──
+  // ── Duplicate guard (date + topic both checked) ──
   if (articles.find(a => a.date === today)) {
-    console.log('✅ Already published today. Skipping.');
+    console.log('✅ Already published today (date match). Skipping.');
     return;
   }
 
@@ -418,9 +492,23 @@ async function main() {
     const topics    = TOPICS[category.id];
     const nextIndex = (state.lastPublishedIndex + 1) % topics.length;
     topic = topics[nextIndex];
+
+    // ── Extra duplicate guard: skip if this topic slug was already published ──
+    const topicSlug = `${createSlug(topic)}`;
+    const alreadyPublished = articles.find(a => a.slug && a.slug.includes(topicSlug));
+    if (alreadyPublished) {
+      console.log(`⏭️  Topic already published ("${topic}") on ${alreadyPublished.date} — advancing index.`);
+      state.lastPublishedIndex = nextIndex;
+      writeState(state);
+      // Try the next topic immediately
+      const nextNext = (nextIndex + 1) % topics.length;
+      topic = topics[nextNext];
+      console.log(`📌 Moved to next topic: "${topic}" [index ${nextNext}]`);
+    }
+
     console.log(`📅 Date     : ${today} (PUBLISH DAY ✅)`);
     console.log(`📂 Category : ${category.name}`);
-    console.log(`📌 Topic    : "${topic}" [index ${nextIndex}]`);
+    console.log(`📌 Topic    : "${topic}"`);
     console.log(`🤖 Model    : ${MODEL}`);
   }
 
@@ -446,7 +534,12 @@ async function main() {
     return;
   }
 
-  const imageUrl = await fetchUnsplashImage(data.imageQuery, category.imageQuery);
+  // ── Load used images to avoid repeats ──
+  const usedImages = loadUsedImages();
+  // Also seed from existing articles.json images
+  articles.forEach(a => { if (a.image) usedImages.add(a.image); });
+
+  const imageUrl = await fetchUnsplashImage(data.imageQuery, category.imageQuery, usedImages);
 
   const article = {
     id: slug, slug,
@@ -461,8 +554,20 @@ async function main() {
     quiz: (data.quiz || []).slice(0, 2),
   };
 
+  // ── Check article content uniqueness (slug-based) ──
+  const dupCheck = articles.find(a => a.slug === article.slug || a.title === article.title);
+  if (dupCheck) {
+    console.log(`⚠️  Duplicate article detected (slug/title match "${dupCheck.slug}") — aborting save.`);
+    return;
+  }
+
   articles.unshift(article);
   saveArticles(articles);
+
+  // ── Track used image ──
+  usedImages.add(imageUrl);
+  saveUsedImages(usedImages);
+  console.log(`🖼️  Image tracked (${usedImages.size} total used)`);
 
   // ── Update state on success ──
   if (isRetry) {
