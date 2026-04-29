@@ -1,5 +1,15 @@
 [
   {
+    "date": "2026-04-29",
+    "articleSlug": "2026-04-29-security-and-access-control-in-dialogflow-cx",
+    "articleTitle": "Securing Your Conversational AI: A Deep Dive into Dialogflow CX Security and Access Control",
+    "postText": "Do you really understand Securing Your Conversational AI: A Deep Dive into Dialogflow CX Security and Access Control?\n\nThis article will guide you through the essential security features and access control mechanisms within Dialogflow CX, enabling you to protect your sensitive data and manage user permissions effectively.\n💡 Google Cloud IAM is the foundation of Dialogflow CX security.\n\nRead today's article 👇\n\n#dialogflow-cx #security #accesscontrol #iam",
+    "articleUrl": "https://ai-article-publisher.vercel.app//en/blog/2026-04-29-security-and-access-control-in-dialogflow-cx",
+    "linkedinPostId": "urn:li:share:7455137734014287872",
+    "hasImage": true,
+    "postedAt": "2026-04-29T06:15:46.318Z"
+  },
+  {
     "date": "2026-04-25",
     "articleSlug": "2026-04-25-dialogflow-cx-analytics-and-conversation-history",
     "articleTitle": "Unlocking Insights: A Beginner's Guide to Dialogflow CX Analytics and Conversation History",
