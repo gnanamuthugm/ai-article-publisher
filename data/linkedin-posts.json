@@ -1,5 +1,15 @@
 [
   {
+    "date": "2026-05-01",
+    "articleSlug": "2026-05-01-playbook-for-multilingual-conversational-agents",
+    "articleTitle": "Your First Playbook: Mastering Multilingual Conversational Agents",
+    "postText": "Do you really understand Your First Playbook: Mastering Multilingual Conversational Agents?\n\nThis playbook will guide you through the essential steps and considerations for building and deploying successful conversational agents that can effectively communicate with users in multiple languages.\n💡 Implement accurate language detection and routing mechanisms for seamless user journeys.\n\nRead today's article 👇\n\n#conversational-agents-playbook #multilingual-ai #customer-experience #nlp",
+    "articleUrl": "https://ai-article-publisher.vercel.app//en/blog/2026-05-01-playbook-for-multilingual-conversational-agents",
+    "linkedinPostId": "urn:li:share:7455866330412507136",
+    "hasImage": true,
+    "postedAt": "2026-05-01T06:30:56.743Z"
+  },
+  {
     "date": "2026-04-29",
     "articleSlug": "2026-04-29-security-and-access-control-in-dialogflow-cx",
     "articleTitle": "Securing Your Conversational AI: A Deep Dive into Dialogflow CX Security and Access Control",
