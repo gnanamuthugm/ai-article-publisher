@@ -69,11 +69,11 @@ export default function QuizSection({ questions }: QuizSectionProps) {
               Q{i + 1}. {q.question}
             </p>
             <div className="grid gap-2">
-              {q.options.map((opt) => {
-                const letter = opt.charAt(0); // "A", "B", "C", "D"
+              {q.options.map((opt, optIndex) => {
+                const letter = ["A", "B", "C", "D"][optIndex]; // derive letter from index
                 return (
                   <button
-                    key={opt}
+                    key={optIndex}
                     disabled={submitted}
                     onClick={() => {
                       if (!submitted) {
@@ -82,7 +82,7 @@ export default function QuizSection({ questions }: QuizSectionProps) {
                     }}
                     className={`text-left px-4 py-3 rounded-xl text-sm transition-all ${getOptionStyle(i, letter)}`}
                   >
-                    {opt}
+                    <span className="font-semibold mr-2">{letter}.</span>{opt}
                   </button>
                 );
               })}

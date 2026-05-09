@@ -31,6 +31,12 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      # Install canvas dependencies (needed for Instagram image generation)
+      - name: Install canvas system dependencies
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq build-essential libcairo2-dev libpango1.0-dev libjpeg-dev libgif-dev librsvg2-dev
+
       - name: Generate blog article
         env:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
@@ -65,4 +71,30 @@ jobs:
         run: |
           git add data/linkedin-posts.json || true
           git diff --staged --quiet || git commit -m "📣 linkedin: $(date +'%Y-%m-%d')"
+          git push origin main || true
+
+      # ── Instagram: runs ONLY after LinkedIn post succeeds ──────────────────
+      # Key rule: Instagram post only on LinkedIn + Website publish days.
+      # The post-to-instagram.js script checks data/linkedin-posts.json
+      # to verify LinkedIn posted today before proceeding.
+      - name: Install canvas npm package
+        run: npm install canvas --save
+        continue-on-error: true
+
+      - name: Post to Instagram
+        continue-on-error: true
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          UNSPLASH_ACCESS_KEY: ${{ secrets.UNSPLASH_ACCESS_KEY }}
+          INSTAGRAM_ACCESS_TOKEN: ${{ secrets.INSTAGRAM_ACCESS_TOKEN }}
+          INSTAGRAM_USER_ID: ${{ secrets.INSTAGRAM_USER_ID }}
+          IMGBB_API_KEY: ${{ secrets.IMGBB_API_KEY }}
+          NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
+          NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY }}
+        run: node scripts/post-to-instagram.js
+
+      - name: Commit Instagram log
+        run: |
+          git add data/instagram-posts.json data/instagram-images/ || true
+          git diff --staged --quiet || git commit -m "📸 instagram: $(date +'%Y-%m-%d')"
           git push origin main || true

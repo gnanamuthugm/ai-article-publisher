@@ -9,7 +9,8 @@
     "lint": "eslint",
     "generate:daily": "node scripts/generate-daily-blog.js",
     "post:linkedin": "node scripts/post-to-linkedin.js",
-    "publish:all": "node scripts/generate-daily-blog.js && node scripts/post-to-linkedin.js",
+    "post:instagram": "node scripts/post-to-instagram.js",
+    "publish:all": "node scripts/generate-daily-blog.js && node scripts/post-to-linkedin.js && node scripts/post-to-instagram.js",
     "db:backfill": "node scripts/backfill-db.js"
   },
   "dependencies": {
@@ -18,6 +19,7 @@
     "@supabase/supabase-js": "^2.103.0",
     "@vercel/analytics": "^2.0.1",
     "@vercel/speed-insights": "^2.0.0",
+    "canvas": "^2.11.2",
     "dotenv": "^17.4.1",
     "gray-matter": "^4.0.3",
     "html2canvas": "^1.4.1",

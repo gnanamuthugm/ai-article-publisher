@@ -86,7 +86,7 @@
           "It guarantees the agent will never make a mistake.",
           "It is only necessary for very simple agents."
         ],
-        "answer": "It systematically identifies and mitigates potential issues before they impact users."
+        "answer": "B"
       },
       {
         "question": "Which of these falls under the 'Technical Readiness and Infrastructure' section of a Go-Live Checklist?",
@@ -96,7 +96,7 @@
           "Verifying that all third-party integrations are functioning correctly in the production environment.",
           "Confirming that customer support teams are trained."
         ],
-        "answer": "Verifying that all third-party integrations are functioning correctly in the production environment."
+        "answer": "C"
       }
     ]
   },
