@@ -178,7 +178,7 @@ Return ONLY a valid JSON object with this exact structure (no markdown, no code 
     "Key CCAIP takeaway 4",
     "Key CCAIP takeaway 5"
   ],
-  "imageQuery": "A 3-4 word Unsplash search query relevant to contact center AI (e.g. 'contact center technology', 'customer service ai', 'call center operations', 'ai customer support')",
+  "imageQuery": "A highly specific 3-5 word Unsplash search query that DIRECTLY relates to the exact topic '${topic}'. Examples: for 'Sentiment Analysis' use 'sentiment analysis dashboard', for 'Voice Biometrics' use 'voice recognition technology', for 'Workforce Management' use 'workforce scheduling software', for 'Fraud Detection' use 'fraud detection security'. DO NOT use generic terms like 'contact center technology' or 'ai customer support'. The query must reflect the specific subject of this article.",
   "tags": ["ccaip", "contact-center-ai", "conversational-ai"],
   "quiz": [
     {
@@ -220,25 +220,36 @@ Return ONLY a valid JSON object with this exact structure (no markdown, no code 
 }
 
 // ── Fetch image from Unsplash ──
-async function fetchUnsplashImage(query) {
+async function fetchUnsplashImage(query, topicFallback) {
   const key = process.env.UNSPLASH_ACCESS_KEY;
   if (!key || key === 'your-unsplash-key') {
     console.warn('⚠️  No Unsplash key, using placeholder image');
     return 'https://images.unsplash.com/photo-1553877522-43269d4ea984?w=800&auto=format&fit=crop';
   }
 
-  try {
-    const url = `https://api.unsplash.com/search/photos?query=${encodeURIComponent(query)}&per_page=5&orientation=landscape&client_id=${key}`;
-    const res = await fetch(url);
-    const data = await res.json();
+  // Build a prioritised list of queries to try — most specific first
+  const queries = [
+    query,                                    // Gemini's specific imageQuery
+    topicFallback,                            // Raw topic title (e.g. "Sentiment Analysis")
+    `${topicFallback} technology`,            // Topic + "technology"
+    'contact center ai',                      // Generic fallback
+  ].filter(Boolean);
 
-    if (data.results && data.results.length > 0) {
-      const img = data.results[Math.floor(Math.random() * Math.min(3, data.results.length))];
-      console.log(`🖼️  Image fetched: ${img.urls.regular}`);
-      return img.urls.regular;
+  for (const q of queries) {
+    try {
+      const url = `https://api.unsplash.com/search/photos?query=${encodeURIComponent(q)}&per_page=5&orientation=landscape&client_id=${key}`;
+      const res = await fetch(url);
+      const data = await res.json();
+
+      if (data.results && data.results.length > 0) {
+        const img = data.results[Math.floor(Math.random() * Math.min(3, data.results.length))];
+        console.log(`🖼️  Image fetched for query "${q}": ${img.urls.regular}`);
+        return img.urls.regular;
+      }
+      console.warn(`⚠️  No results for query "${q}", trying next...`);
+    } catch (e) {
+      console.warn(`⚠️  Unsplash fetch failed for "${q}": ${e.message}`);
     }
-  } catch (e) {
-    console.warn('⚠️  Unsplash fetch failed:', e.message);
   }
 
   return 'https://images.unsplash.com/photo-1553877522-43269d4ea984?w=800&auto=format&fit=crop';
@@ -328,9 +339,9 @@ async function main() {
   const articleData = await generateArticleJSON(topic);
   console.log(`✅ Article generated: "${articleData.title}"`);
 
-  // 2. Fetch image
+  // 2. Fetch image — pass both Gemini's specific query AND the raw topic as fallback
   const imageQuery = articleData.imageQuery || topic;
-  const image = await fetchUnsplashImage(imageQuery);
+  const image = await fetchUnsplashImage(imageQuery, topic);
 
   // 3. Build article record
   const newArticle = {
