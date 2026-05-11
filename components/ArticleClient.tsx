@@ -420,7 +420,7 @@ export default function ArticleClient({ article, lang }: { article: Article; lan
 
       <main className="max-w-3xl mx-auto px-4 py-8">
         {article.image && (
-          <img src={article.image} alt={article.title} className="w-full h-64 object-cover rounded-2xl mb-6 shadow-sm" />
+          <img src={article.image} alt={article.title} className="w-full rounded-2xl mb-6 shadow-sm object-contain" />
         )}
 
         <div className="flex items-center gap-2 mb-3 flex-wrap">
