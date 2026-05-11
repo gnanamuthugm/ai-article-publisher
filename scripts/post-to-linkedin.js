@@ -45,9 +45,13 @@ function buildFallbackTeaser(article) {
   const hook = `Do you really understand ${article.title}?`;
   const insight = article.summary || 'A key concept every Contact Center & AI practitioner should know.';
   const keyPoint = article.keyPoints?.[0] ? `\n💡 ${article.keyPoints[0]}` : '';
+  return `${hook}\n\n${insight}${keyPoint}\n\nRead today's article 👇`;
+}
+
+function buildHashtags(article) {
   const tags = (article.tags || ['CCAIP', 'DialogflowCX', 'ConversationalAI'])
-    .slice(0, 4).map(t => `#${t.replace(/\s+/g, '')}`).join(' ');
-  return `${hook}\n\n${insight}${keyPoint}\n\nRead today's article 👇\n\n${tags}`;
+    .slice(0, 4).map(t => `#${t.replace(/\s+/g, '')}`);
+  return tags.join(' ');
 }
 
 async function generateLinkedInTeaser(article) {
@@ -64,11 +68,11 @@ RULES:
 - Line 1: Powerful hook (surprising fact or bold question)
 - Lines 2-3: 1-2 specific insights from the topic
 - Last line: Call-to-action like "Read today's article 👇"
-- End with 3-4 hashtags on a new line
 - Max 2 emojis
+- NO hashtags — they will be added separately
 - NO signatures, NO portfolio links, NO "— Name"
 
-Return ONLY the post text.`;
+Return ONLY the post text (no hashtags).`;
 
   for (let attempt = 1; attempt <= 2; attempt++) {
     try {
@@ -185,17 +189,27 @@ async function postToLinkedIn(teaserText, articleUrl, imageUrn) {
     return { simulated: true };
   }
 
-  const fullText = `${teaserText}\n\n🔗 Read more: ${articleUrl}`;
+  // Strip any hashtags Gemini accidentally included (we add our own)
+  const cleanTeaser = teaserText.split('\n').filter(l => !l.trim().startsWith('#')).join('\n').trim();
+
+  // Format: body text (image மேல் தெரியும்) → image → link + hashtags (image கீழ் தெரியும்)
+  const fullText = `${cleanTeaser}\n\n🔗 Read more: ${articleUrl}\n\n${buildHashtags(article)}`;
+
+  // commentary = 1 line hook only (truncated "...more" effect)
+  const hookLine = cleanTeaser.split('\n')[0].trim();
+
+  // description below image = link + hashtags
+  const imageCaption = `🔗 Read more: ${articleUrl}\n\n${buildHashtags(article)}`;
 
   // Post with image if available, else text only
   const shareContent = imageUrn ? {
-    shareCommentary: { text: fullText },
+    shareCommentary: { text: hookLine },
     shareMediaCategory: 'IMAGE',
     media: [{
       status: 'READY',
-      description: { text: teaserText.substring(0, 200) },
+      description: { text: imageCaption },
       media: imageUrn,
-      title: { text: 'Read the full article' },
+      title: { text: hookLine },
     }],
   } : {
     shareCommentary: { text: fullText },
