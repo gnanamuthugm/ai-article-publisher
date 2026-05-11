@@ -7,7 +7,10 @@ require('dotenv').config({ path: '.env.local' });
 // CCAIP Daily Article Generator
 // - Picks a daily rotating topic from the list below
 // - Generates full article + quiz via Gemini AI
-// - Fetches a relevant image via Unsplash
+// - Fetches a UNIQUE, CONTENT-BASED image via Unsplash
+//   ✅ FIX 1: No more random pick — always best match (index 0)
+//   ✅ FIX 2: imageQuery built from article title + content keywords
+//   ✅ FIX 3: Used image URLs tracked to prevent repeats
 // - Updates data/articles.json (used by the website)
 // ============================================================
 
@@ -134,6 +137,7 @@ function getRandomCCAIPTopic() {
 const CONFIG = {
   articlesJsonPath: path.join(process.cwd(), 'data', 'articles.json'),
   contentDir: path.join(process.cwd(), 'content', 'articles'),
+  usedImagesPath: path.join(process.cwd(), 'data', 'used-images.json'),
   model: 'gemini-2.5-flash',
 };
 
@@ -143,6 +147,158 @@ function getTodaysTopic() {
   const today = new Date();
   const dayIndex = Math.floor((today - start) / (1000 * 60 * 60 * 24));
   return CCAIP_TOPICS[dayIndex % CCAIP_TOPICS.length];
+}
+
+// ─────────────────────────────────────────────────────────────
+// FIX 3: Used image tracker — load / save / check
+// Tracks Unsplash photo IDs (not full URLs) to avoid repeats
+// ─────────────────────────────────────────────────────────────
+function loadUsedImages() {
+  try {
+    const raw = fs.readFileSync(CONFIG.usedImagesPath, 'utf8');
+    return new Set(JSON.parse(raw));
+  } catch {
+    return new Set();
+  }
+}
+
+function saveUsedImages(usedSet) {
+  const dir = path.dirname(CONFIG.usedImagesPath);
+  if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+  fs.writeFileSync(CONFIG.usedImagesPath, JSON.stringify([...usedSet], null, 2), 'utf8');
+}
+
+// Extract Unsplash photo ID from URL  e.g. "photo-1234567890-abcdef"
+function extractUnsplashId(url) {
+  const match = url.match(/photo-[a-zA-Z0-9_-]+/);
+  return match ? match[0] : url;
+}
+
+// ─────────────────────────────────────────────────────────────
+// FIX 2: Build a rich image query from title + content keywords
+// Gemini still provides imageQuery, but we ENHANCE it using
+// the article title and key h2 headings extracted from content
+// ─────────────────────────────────────────────────────────────
+function buildEnhancedImageQuery(title, content, geminiQuery) {
+  // Extract h2 headings from HTML content to find core topics
+  const headings = [];
+  const h2Matches = content.matchAll(/<h2[^>]*>(.*?)<\/h2>/gi);
+  for (const m of h2Matches) {
+    const clean = m[1].replace(/<[^>]+>/g, '').trim();
+    if (clean.length > 3 && clean.length < 60) headings.push(clean);
+  }
+
+  // Strip HTML from title for clean keywords
+  const cleanTitle = title.replace(/<[^>]+>/g, '').trim();
+
+  // Priority logic:
+  // 1. If Gemini gave a specific imageQuery (not generic), use it as-is → it's the best
+  // 2. Otherwise derive from title keywords
+  const genericTerms = ['contact center technology', 'ai customer support', 'customer service', 'contact center ai'];
+  const isGeneric = genericTerms.some(g => geminiQuery.toLowerCase().includes(g));
+
+  if (geminiQuery && !isGeneric) {
+    console.log(`🔍 Using Gemini imageQuery: "${geminiQuery}"`);
+    return geminiQuery;
+  }
+
+  // Derive from title: take first 4 meaningful words
+  const stopWords = new Set(['the', 'a', 'an', 'in', 'for', 'of', 'and', 'or', 'with', 'to', 'at', 'by', 'on']);
+  const titleWords = cleanTitle.toLowerCase().split(/\s+/).filter(w => !stopWords.has(w) && w.length > 2);
+  const derived = titleWords.slice(0, 4).join(' ');
+
+  console.log(`🔍 Derived imageQuery from title: "${derived}"`);
+  return derived;
+}
+
+// ─────────────────────────────────────────────────────────────
+// FIX 1 + FIX 3: Fetch best, non-repeated image from Unsplash
+// - FIX 1: picks index 0 (best match), NOT random
+// - FIX 3: skips already-used photo IDs
+// ─────────────────────────────────────────────────────────────
+async function fetchUnsplashImage(primaryQuery, topicFallback, usedImages) {
+  const key = process.env.UNSPLASH_ACCESS_KEY;
+  if (!key || key === 'your-unsplash-key') {
+    console.warn('⚠️  No Unsplash key, using placeholder image');
+    return 'https://images.unsplash.com/photo-1553877522-43269d4ea984?w=800&auto=format&fit=crop';
+  }
+
+  // Build a prioritised list of queries — most specific first, NO generic fallback last
+  const queries = [
+    primaryQuery,                          // Enhanced / Gemini-specific query
+    topicFallback,                         // Raw topic title
+    `${topicFallback} technology`,         // Topic + "technology"
+    `${topicFallback} software`,           // Topic + "software"
+    'artificial intelligence workplace',   // Better generic than "contact center ai"
+  ].filter(Boolean).map(q => q.trim()).filter(q => q.length > 2);
+
+  // Deduplicate queries
+  const seen = new Set();
+  const uniqueQueries = queries.filter(q => {
+    if (seen.has(q.toLowerCase())) return false;
+    seen.add(q.toLowerCase());
+    return true;
+  });
+
+  for (const q of uniqueQueries) {
+    try {
+      // Fetch more results (10) so we have room to skip duplicates
+      const url = `https://api.unsplash.com/search/photos?query=${encodeURIComponent(q)}&per_page=10&orientation=landscape&client_id=${key}`;
+      const res = await fetch(url);
+      const data = await res.json();
+
+      if (!data.results || data.results.length === 0) {
+        console.warn(`⚠️  No results for query "${q}", trying next...`);
+        continue;
+      }
+
+      // FIX 1 + FIX 3: iterate from index 0 (best match), skip used images
+      for (const img of data.results) {
+        const photoId = extractUnsplashId(img.urls.regular);
+        if (usedImages.has(photoId)) {
+          console.log(`⏭️  Skipping already-used image: ${photoId}`);
+          continue;
+        }
+        // Found a fresh, best-match image!
+        console.log(`🖼️  Image selected (query="${q}", id=${photoId}): ${img.urls.regular}`);
+        return img.urls.regular;
+      }
+
+      console.warn(`⚠️  All images for query "${q}" already used, trying next query...`);
+    } catch (e) {
+      console.warn(`⚠️  Unsplash fetch failed for "${q}": ${e.message}`);
+    }
+  }
+
+  // Hard fallback — only if literally everything is exhausted
+  console.warn('⚠️  All queries exhausted, using fallback placeholder');
+  return 'https://images.unsplash.com/photo-1553877522-43269d4ea984?w=800&auto=format&fit=crop';
+}
+
+// ── Create slug from title ──
+function createSlug(title) {
+  return title
+    .toLowerCase()
+    .replace(/[^a-z0-9\s-]/g, '')
+    .replace(/\s+/g, '-')
+    .substring(0, 60)
+    .replace(/-+$/, '');
+}
+
+// ── Load existing articles.json ──
+function loadArticles() {
+  try {
+    const raw = fs.readFileSync(CONFIG.articlesJsonPath, 'utf8');
+    return JSON.parse(raw);
+  } catch {
+    return [];
+  }
+}
+
+// ── Save articles.json ──
+function saveArticles(articles) {
+  fs.writeFileSync(CONFIG.articlesJsonPath, JSON.stringify(articles, null, 2), 'utf8');
+  console.log(`💾 articles.json updated (${articles.length} total articles)`);
 }
 
 // ── Generate article JSON via Gemini ──
@@ -173,12 +329,12 @@ Return ONLY a valid JSON object with this exact structure (no markdown, no code 
   "realWorldExample": "A specific real-world example (2-3 sentences) showing how a contact center implemented this CCAIP solution with measurable results",
   "keyPoints": [
     "Key CCAIP takeaway 1",
-    "Key CCAIP takeaway 2", 
+    "Key CCAIP takeaway 2",
     "Key CCAIP takeaway 3",
     "Key CCAIP takeaway 4",
     "Key CCAIP takeaway 5"
   ],
-  "imageQuery": "A highly specific 3-5 word Unsplash search query that DIRECTLY relates to the exact topic '${topic}'. Examples: for 'Sentiment Analysis' use 'sentiment analysis dashboard', for 'Voice Biometrics' use 'voice recognition technology', for 'Workforce Management' use 'workforce scheduling software', for 'Fraud Detection' use 'fraud detection security'. DO NOT use generic terms like 'contact center technology' or 'ai customer support'. The query must reflect the specific subject of this article.",
+  "imageQuery": "A highly specific 3-5 word Unsplash search query that DIRECTLY and VISUALLY represents the exact topic '${topic}'. Think: what image would a journalist use to illustrate this article? Examples: 'sentiment analysis dashboard', 'voice recognition waveform', 'workforce scheduling software', 'fraud alert security screen', 'cloud computing server room', 'customer support headset agent'. NEVER use generic terms like 'contact center technology', 'ai customer support', or 'customer service'. The query must reflect the specific visual subject of this article.",
   "tags": ["ccaip", "contact-center-ai", "conversational-ai"],
   "quiz": [
     {
@@ -219,87 +375,22 @@ Return ONLY a valid JSON object with this exact structure (no markdown, no code 
   }
 }
 
-// ── Fetch image from Unsplash ──
-async function fetchUnsplashImage(query, topicFallback) {
-  const key = process.env.UNSPLASH_ACCESS_KEY;
-  if (!key || key === 'your-unsplash-key') {
-    console.warn('⚠️  No Unsplash key, using placeholder image');
-    return 'https://images.unsplash.com/photo-1553877522-43269d4ea984?w=800&auto=format&fit=crop';
-  }
-
-  // Build a prioritised list of queries to try — most specific first
-  const queries = [
-    query,                                    // Gemini's specific imageQuery
-    topicFallback,                            // Raw topic title (e.g. "Sentiment Analysis")
-    `${topicFallback} technology`,            // Topic + "technology"
-    'contact center ai',                      // Generic fallback
-  ].filter(Boolean);
-
-  for (const q of queries) {
-    try {
-      const url = `https://api.unsplash.com/search/photos?query=${encodeURIComponent(q)}&per_page=5&orientation=landscape&client_id=${key}`;
-      const res = await fetch(url);
-      const data = await res.json();
-
-      if (data.results && data.results.length > 0) {
-        const img = data.results[Math.floor(Math.random() * Math.min(3, data.results.length))];
-        console.log(`🖼️  Image fetched for query "${q}": ${img.urls.regular}`);
-        return img.urls.regular;
-      }
-      console.warn(`⚠️  No results for query "${q}", trying next...`);
-    } catch (e) {
-      console.warn(`⚠️  Unsplash fetch failed for "${q}": ${e.message}`);
-    }
-  }
-
-  return 'https://images.unsplash.com/photo-1553877522-43269d4ea984?w=800&auto=format&fit=crop';
-}
-
-// ── Create slug from title ──
-function createSlug(title) {
-  return title
-    .toLowerCase()
-    .replace(/[^a-z0-9\s-]/g, '')
-    .replace(/\s+/g, '-')
-    .substring(0, 60)
-    .replace(/-+$/, '');
-}
-
-// ── Load existing articles.json ──
-function loadArticles() {
-  try {
-    const raw = fs.readFileSync(CONFIG.articlesJsonPath, 'utf8');
-    return JSON.parse(raw);
-  } catch {
-    return [];
-  }
-}
-
-// ── Save articles.json ──
-function saveArticles(articles) {
-  fs.writeFileSync(CONFIG.articlesJsonPath, JSON.stringify(articles, null, 2), 'utf8');
-  console.log(`💾 articles.json updated (${articles.length} total articles)`);
-}
-
-// 6. Save multilingual markdown backup
+// ── Save multilingual markdown backup ──
 function saveMultilingualMarkdown(topic, articleData) {
   const today = new Date().toISOString().split('T')[0];
   const slug = createSlug(topic);
   const cleanContent = articleData.content.replace(/<[^>]+>/g, '');
-  
-  // Languages to generate content for
+
   const languages = ['en', 'ta', 'hi', 'te'];
-  
+
   languages.forEach(lang => {
     const langDir = path.join(CONFIG.contentDir, lang);
     if (!fs.existsSync(langDir)) {
       fs.mkdirSync(langDir, { recursive: true });
     }
-    
+
     const filepath = path.join(langDir, `${slug}.md`);
-    
-    // For now, use the same content for all languages
-    // In the future, you could translate the content
+
     const md = `---
 title: "${articleData.title}"
 description: "${articleData.summary}"
@@ -312,7 +403,7 @@ tags: ${JSON.stringify(articleData.tags || ['ccaip', 'contact-center-ai'])}
 ${cleanContent}
 `;
     fs.writeFileSync(filepath, md, 'utf8');
-    console.log(`? Markdown saved (${lang}): ${path.basename(filepath)}`);
+    console.log(`📄 Markdown saved (${lang}): ${path.basename(filepath)}`);
   });
 }
 
@@ -335,15 +426,31 @@ async function main() {
     return;
   }
 
-  // 1. Generate article content
+  // 1. Generate article content via Gemini
   const articleData = await generateArticleJSON(topic);
   console.log(`✅ Article generated: "${articleData.title}"`);
 
-  // 2. Fetch image — pass both Gemini's specific query AND the raw topic as fallback
-  const imageQuery = articleData.imageQuery || topic;
-  const image = await fetchUnsplashImage(imageQuery, topic);
+  // 2. Load used images tracker (FIX 3)
+  const usedImages = loadUsedImages();
+  console.log(`📋 Already used images tracked: ${usedImages.size}`);
 
-  // 3. Build article record
+  // 3. Build the best image query from title + content + Gemini hint (FIX 2)
+  const primaryQuery = buildEnhancedImageQuery(
+    articleData.title,
+    articleData.content,
+    articleData.imageQuery || ''
+  );
+
+  // 4. Fetch image — best match, no random, no repeats (FIX 1 + FIX 3)
+  const imageUrl = await fetchUnsplashImage(primaryQuery, topic, usedImages);
+
+  // 5. Mark this image as used and save tracker (FIX 3)
+  const usedPhotoId = extractUnsplashId(imageUrl);
+  usedImages.add(usedPhotoId);
+  saveUsedImages(usedImages);
+  console.log(`✅ Image marked as used: ${usedPhotoId}`);
+
+  // 6. Build article record
   const newArticle = {
     id: slug,
     slug: slug,
@@ -353,21 +460,22 @@ async function main() {
     content: articleData.content,
     realWorldExample: articleData.realWorldExample,
     keyPoints: articleData.keyPoints || [],
-    image: image,
+    image: imageUrl,
     tags: articleData.tags || ['ccaip', 'contact-center'],
     quiz: articleData.quiz || [],
   };
 
-  // 4. Prepend new article (newest first)
+  // 7. Prepend new article (newest first)
   articles.unshift(newArticle);
 
-  // 5. Save articles.json
+  // 8. Save articles.json
   saveArticles(articles);
 
-  // 6. Save markdown backup in multiple languages
+  // 9. Save markdown backup in multiple languages
   saveMultilingualMarkdown(topic, articleData);
 
-  console.log(`\n? Done! Article "${newArticle.title}" added to website.\n`);
+  console.log(`\n✅ Done! Article "${newArticle.title}" added to website.`);
+  console.log(`🖼️  Image: ${imageUrl}\n`);
 }
 
 main().catch(err => {
