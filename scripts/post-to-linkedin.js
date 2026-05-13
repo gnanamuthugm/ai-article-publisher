@@ -3,7 +3,7 @@ const path = require('path');
 const { GoogleGenAI } = require('@google/genai');
 require('dotenv').config({ path: '.env.local' });
 
-const MODEL = 'gemini-2.5-flash-lite-preview-06-17'; // Free tier: higher quota than 2.0-flash
+const MODEL = 'gemini-2.5-flash-preview-04-17'; // Free tier: higher quota than 2.0-flash
 
 const ARTICLES_PATH = path.join(process.cwd(), 'data', 'articles.json');
 const LINKEDIN_LOG_PATH = path.join(process.cwd(), 'data', 'linkedin-posts.json');
@@ -181,7 +181,7 @@ async function uploadImageToLinkedIn(imageUrl) {
   }
 }
 
-async function postToLinkedIn(teaserText, articleUrl, imageUrn) {
+async function postToLinkedIn(teaserText, articleUrl, imageUrn, article) {
   if (!LINKEDIN_ACCESS_TOKEN || !LINKEDIN_PERSON_URN) {
     console.log('\n⚠️  No LinkedIn credentials — simulated post:\n');
     console.log(teaserText);
@@ -296,14 +296,14 @@ async function main() {
 
   let result;
   try {
-    result = await postToLinkedIn(teaserText, articleUrl, imageUrn);
+    result = await postToLinkedIn(teaserText, articleUrl, imageUrn, article);
   } catch (err) {
     console.log(`⚠️  LinkedIn post failed: ${err.message.substring(0, 100)}`);
     // Try once more without image
     if (imageUrn) {
       console.log('🔄 Retrying without image...');
       try {
-        result = await postToLinkedIn(teaserText, articleUrl, null);
+        result = await postToLinkedIn(teaserText, articleUrl, null, article);
       } catch (e) {
         console.log(`⚠️  Retry also failed: ${e.message.substring(0, 100)}`);
         return;
