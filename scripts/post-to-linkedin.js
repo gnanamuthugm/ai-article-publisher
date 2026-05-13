@@ -203,7 +203,7 @@ async function postToLinkedIn(teaserText, articleUrl, imageUrn, article) {
 
   // Post with image if available, else text only
   const shareContent = imageUrn ? {
-    shareCommentary: { text: hookLine },
+    shareCommentary: { text: cleanTeaser },
     shareMediaCategory: 'IMAGE',
     media: [{
       status: 'READY',
