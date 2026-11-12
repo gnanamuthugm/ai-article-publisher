@@ -1,9 +1,14 @@
 name: CCAIP Blog Publisher (Every 4 Days)
 
 on:
+  push:
+    branches:
+      - main
+
   schedule:
-    - cron: '0 2 */4 * *'  # Every 4 days at 7:30 AM IST
-  workflow_dispatch:       # Manual trigger when needed
+    - cron: '0 2 */4 * *'
+
+  workflow_dispatch:
 
 # Prevent duplicate runs on the same day
 concurrency:
