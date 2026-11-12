@@ -1,8 +1,8 @@
-name: CCAIP Blog Publisher (Every 5 Days)
+name: CCAIP Blog Publisher (Every 4 Days)
 
 on:
   schedule:
-    - cron: '0 2 */5 * *'  # Every 5 days at 7:30 AM IST
+    - cron: '0 2 */4 * *'  # Every 4 days at 7:30 AM IST
   workflow_dispatch:       # Manual trigger when needed
 
 # Prevent duplicate runs on the same day
